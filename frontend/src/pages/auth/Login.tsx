@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../router/App.css";
 
+// 더미데이터 -> 백엔드 구현 전 로그인 기능을 구현하기 위함
 const DUMMY_USER = {
   email: "test@example.com",
   password: "1234",
@@ -28,8 +29,8 @@ const Login = () => {
   );
 
   return (
-    <div className="w-full min-w-screen min-h-screen flex items-center justify-center py-8">
-      <div className="flex flex-col md:flex-row bg-[#224bd3] rounded-2xl shadow-2xl w-full max-w-6xl overflow-hidden">
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="flex flex-col md:flex-row bg-[#224bd3] rounded-2xl shadow-2xl max-w-6xl">
         <div className="hidden md:block md:w-1/2 bg-primary-600 p-12 relative">
           <div className="absolute top-0 left-0 w-full h-full bg-primary-700 opacity-20 z-10"></div>
           <div className="relative z-20 h-full flex flex-col justify-center">
