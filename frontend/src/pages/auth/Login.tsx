@@ -4,7 +4,7 @@ import "../../router/App.css";
 
 // 더미데이터 -> 백엔드 구현 전 로그인 기능을 구현하기 위함
 const DUMMY_USER = {
-  email: "test@example.com",
+  email: "minho2633@naver.com",
   password: "1234",
 };
 
@@ -14,32 +14,49 @@ const Login = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  /**
+   * 폼 제출 처리 함수 - 로그인 로직을 담당
+   *
+   * useCallback으로 감싸는 이유:
+   * - 함수 메모이제이션으로 불필요한 리렌더링 방지
+   * - 의존성 배열([email, password, navigate])의 값이 변경될 때만 함수 재생성
+   * - 성능 최적화 + 자식 컴포넌트에 props 전달 시 안정성 보장
+   */
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
+      // 이벤트 객체 확인용 (개발자 도구 Console에서 확인 가능)
+      // 1. 폼의 기본 제출 동작 방지 (페이지 새로고침 방지)
       e.preventDefault();
+
+      // 2. 새로운 로그인 시도 시 이전 에러 메시지 초기화 (깔끔한 UX 제공)
       setError("");
+
+      // 3. 로그인 검증 로직 (현재는 더미 데이터 사용, 실제로는 API 호출)
       if (email === DUMMY_USER.email && password === DUMMY_USER.password) {
-        // 로그인 성공 시 메인 페이지로 이동 ("/" 경로 예시)
+        // 4-1. 로그인 성공: React Router의 navigate로 메인 페이지("/")로 이동
         navigate("/");
       } else {
+        // 4-2. 로그인 실패: 에러 상태 업데이트로 사용자에게 실패 메시지 표시
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
       }
     },
+    // 의존성 배열: 이 값들이 변경될 때만 함수 재생성
+    // - email, password: 사용자 입력값
+    // - navigate: React Router 함수 (보통 변경되지 않음)
     [email, password, navigate]
   );
 
   return (
     <div className="w-full h-full flex items-center justify-center">
-      <div className="flex flex-col md:flex-row bg-[#224bd3] rounded-2xl shadow-2xl max-w-6xl">
-        <div className="hidden md:block md:w-1/2 bg-primary-600 p-12 relative">
-          <div className="absolute top-0 left-0 w-full h-full bg-primary-700 opacity-20 z-10"></div>
+      <div className="flex flex-col md:flex-row rounded-2xl shadow-2xl max-w-6xl">
+        <div className="hidden md:block md:w-1/2 p-12 relative">
+          <div className="bg-[#224db3] absolute top-0 left-0 w-full h-full"></div>
           <div className="relative z-20 h-full flex flex-col justify-center">
             <h2 className="text-4xl font-bold text-white mb-6">
-              Join our community today
+              사회복지사만을 위한 커뮤니티
             </h2>
             <p className="text-white text-lg mb-8 opacity-90">
-              Access exclusive resources, connect with like-minded individuals,
-              and take your experience to the next level.
+              AI, 커뮤니티, 서비스 찾기 등, 모든 편의를 한 곳에서
             </p>
             <div className="bg-white/10 p-6 rounded-xl backdrop-blur-sm">
               <div className="flex items-center mb-4">
