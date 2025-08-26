@@ -26,13 +26,11 @@ const actionCodeSettings = {
   handleCodeInApp: true,
 
   // 🍎 iOS 앱 설정 (선택사항)
-  // iOS 앱이 있다면 Bundle ID를 설정하여 앱에서 직접 링크를 처리할 수 있습니다
   iOS: {
     bundleId: "com.example.ios", // 실제 iOS 번들 ID로 변경
   },
 
   // 🤖 Android 앱 설정 (선택사항)
-  // Android 앱이 있다면 패키지명을 설정하여 앱에서 직접 링크를 처리할 수 있습니다
   android: {
     packageName: "com.example.android", // 실제 Android 패키지명으로 변경
     installApp: true, // 앱이 설치되지 않은 경우 Play Store로 리디렉션
