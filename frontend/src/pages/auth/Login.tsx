@@ -1,18 +1,14 @@
 import React, { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import "../../router/App.css";
-
-// 더미데이터 -> 백엔드 구현 전 로그인 기능을 구현하기 위함
-const DUMMY_USER = {
-  email: "minho2633@naver.com",
-  password: "1234",
-};
+// import { useNavigate } from "react-router-dom";
+import { sendLoginLink } from "../../utils/emailAuth";
+import "../../main.css";
 
 const Login = () => {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
 
   /**
    * 폼 제출 처리 함수 - 로그인 로직을 담당
@@ -23,40 +19,38 @@ const Login = () => {
    * - 성능 최적화 + 자식 컴포넌트에 props 전달 시 안정성 보장
    */
   const handleSubmit = useCallback(
-    (e: React.FormEvent<HTMLFormElement>) => {
+    async (e: React.FormEvent<HTMLFormElement>) => {
       // 이벤트 객체 확인용 (개발자 도구 Console에서 확인 가능)
       // 1. 폼의 기본 제출 동작 방지 (페이지 새로고침 방지)
       e.preventDefault();
-
-      // 2. 새로운 로그인 시도 시 이전 에러 메시지 초기화 (깔끔한 UX 제공)
       setError("");
-
-      // 3. 로그인 검증 로직 (현재는 더미 데이터 사용, 실제로는 API 호출)
-      if (email === DUMMY_USER.email && password === DUMMY_USER.password) {
-        // 4-1. 로그인 성공: React Router의 navigate로 메인 페이지("/")로 이동
-        navigate("/");
-      } else {
-        // 4-2. 로그인 실패: 에러 상태 업데이트로 사용자에게 실패 메시지 표시
-        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      setLoading(true);
+      try {
+        await sendLoginLink(email);
+        setEmailSent(true);
+      } catch (error: unknown) {
+        setError(`${email}에 대한 전송이 실패했습니다.`);
+      } finally {
+        setLoading(false);
       }
     },
     // 의존성 배열: 이 값들이 변경될 때만 함수 재생성
     // - email, password: 사용자 입력값
     // - navigate: React Router 함수 (보통 변경되지 않음)
-    [email, password, navigate]
+    [email]
   );
 
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="flex flex-col md:flex-row rounded-2xl shadow-2xl max-w-6xl">
-        <div className="hidden md:block md:w-1/2 p-12 relative">
+        <div className="hidden md:block md:w-2/3 p-12 relative">
           <div className="bg-[#224db3] absolute top-0 left-0 w-full h-full"></div>
           <div className="relative z-20 h-full flex flex-col justify-center">
             <h2 className="text-4xl font-bold text-white mb-6">
-              사회복지사만을 위한 커뮤니티
+              사회복지사만을 위한 공간
             </h2>
             <p className="text-white text-lg mb-8 opacity-90">
-              AI, 커뮤니티, 서비스 찾기 등, 모든 편의를 한 곳에서
+              IT와 사회복지의 결합
             </p>
             <div className="bg-white/10 p-6 rounded-xl backdrop-blur-sm">
               <div className="flex items-center mb-4">
@@ -114,26 +108,6 @@ const Login = () => {
                 />
               </div>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  lock
-                </span>
-                <input
-                  type="password"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 outline-none"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
             <div className="flex items-center justify-between">
               <label className="flex items-center">
                 <input
@@ -156,9 +130,14 @@ const Login = () => {
 
             <button
               type="submit"
+              disabled={loading || emailSent}
               className="w-full bg-primary-500 text-white py-3 rounded-lg font-semibold hover:bg-primary-600 transform transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
             >
-              Sign In
+              {emailSent
+                ? "이메일 전송 완료"
+                : loading
+                ? "이메일 전송 중.."
+                : "로그인"}
             </button>
           </form>
 

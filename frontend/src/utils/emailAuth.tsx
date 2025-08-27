@@ -19,27 +19,8 @@ import { auth } from "../firebase";
 const actionCodeSettings = {
   // 🔗 리디렉션 URL: 사용자가 이메일 링크를 클릭했을 때 돌아올 페이지
   // 주의: 이 도메인은 Firebase 콘솔의 승인된 도메인 목록에 있어야 합니다!
-  url: "https://www.example.com/finishSignUp?cartId=1234", // 실제 배포시에는 실제 도메인으로 변경 필요
-
-  // 📱 앱에서 링크 처리: 모바일 앱에서도 링크를 처리할 수 있도록 설정
-  // 반드시 true로 설정해야 합니다!
+  url: window.location.origin, // 현재 도메인 + /login 경로
   handleCodeInApp: true,
-
-  // 🍎 iOS 앱 설정 (선택사항)
-  iOS: {
-    bundleId: "com.example.ios", // 실제 iOS 번들 ID로 변경
-  },
-
-  // 🤖 Android 앱 설정 (선택사항)
-  android: {
-    packageName: "com.example.android", // 실제 Android 패키지명으로 변경
-    installApp: true, // 앱이 설치되지 않은 경우 Play Store로 리디렉션
-    minimumVersion: "12", // 최소 지원 버전
-  },
-
-  // 🌐 커스텀 도메인 (선택사항)
-  // Firebase Hosting에서 설정한 커스텀 도메인을 사용할 때 설정
-  linkDomain: "custom-domain.com", // 실제 커스텀 도메인으로 변경
 };
 
 /**
@@ -66,7 +47,6 @@ export const sendLoginLink = async (email: string) => {
   try {
     // 🚀 Firebase Authentication API를 호출하여 이메일 링크 전송
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-
     // ✅ 성공시 로그 출력 (실제 서비스에서는 제거하거나 적절한 로깅 시스템 사용)
     console.log(`이메일 링크가 ${email}로 성공적으로 전송되었습니다.`);
 
