@@ -29,7 +29,7 @@ const Login = () => {
         await sendLoginLink(email);
         setEmailSent(true);
       } catch (error: unknown) {
-        setError(`${email}에 대한 전송이 실패했습니다.`);
+        setError(`${email}에 대한 전송이 실패했습니다.${error}`);
       } finally {
         setLoading(false);
       }
