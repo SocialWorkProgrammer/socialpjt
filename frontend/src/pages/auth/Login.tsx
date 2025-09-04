@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 // import { useNavigate } from "react-router-dom";
 import { sendLoginLink } from "../../utils/emailAuth";
 import "../../main.css";
@@ -8,7 +8,20 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   // const navigate = useNavigate();
+
+  // 로컬 스토리지 키
+  const REMEMBER_EMAIL_KEY = "remembered_email";
+
+  // 컴포넌트 마운트 시 저장된 이메일 불러오기
+  useEffect(() => {
+    const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   /**
    * 폼 제출 처리 함수 - 로그인 로직을 담당
@@ -28,6 +41,13 @@ const Login = () => {
       try {
         await sendLoginLink(email);
         setEmailSent(true);
+
+        // Remember me 체크 상태에 따라 이메일 저장 또는 삭제
+        if (rememberMe) {
+          localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+        } else {
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
       } catch (error: unknown) {
         setError(`${email}에 대한 전송이 실패했습니다.${error}`);
       } finally {
@@ -35,9 +55,9 @@ const Login = () => {
       }
     },
     // 의존성 배열: 이 값들이 변경될 때만 함수 재생성
-    // - email, password: 사용자 입력값
-    // - navigate: React Router 함수 (보통 변경되지 않음)
-    [email]
+    // - email: 사용자 입력값
+    // - rememberMe: Remember me 체크박스 상태
+    [email, rememberMe]
   );
 
   return (
@@ -79,7 +99,7 @@ const Login = () => {
         <div className="w-full md:w-1/2 p-8 md:p-12">
           <div className="text-center mb-8">
             <div className="bg-primary-500 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="material-symbols-outlined text-white text-2xl">
+              <span className="material-symbols-outlined text-blue-400 text-2xl">
                 groups
               </span>
             </div>
@@ -91,17 +111,11 @@ const Login = () => {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Email Address
-              </label>
               <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  mail
-                </span>
                 <input
                   type="email"
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 outline-none"
-                  placeholder="Enter your email"
+                  placeholder="이메일을 입력하세요"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -112,76 +126,28 @@ const Login = () => {
               <label className="flex items-center">
                 <input
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 text-primary-500 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <span className="ml-2 text-sm text-gray-600">Remember me</span>
               </label>
-              <a
-                href="#"
-                className="text-sm text-primary-500 hover:text-primary-600 transition-colors duration-200"
-              >
-                Forgot password?
-              </a>
             </div>
 
             {error && (
               <div className="text-red-500 text-sm text-center">{error}</div>
             )}
-
             <button
               type="submit"
               disabled={loading || emailSent}
-              className="w-full bg-primary-500 text-white py-3 rounded-lg font-semibold hover:bg-primary-600 transform transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
+              className="w-full bg-primary-500 text-black py-3 rounded-lg font-semibold hover:bg-primary-600 transform transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
             >
-              {emailSent
-                ? "이메일 전송 완료"
-                : loading
-                ? "이메일 전송 중.."
-                : "로그인"}
+              <p>로그인</p>
             </button>
           </form>
-
-          <div className="mt-8">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <button className="bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-center hover:bg-gray-50 transition-colors duration-200 hover:scale-105 transform shadow-sm">
-                <i className="fab fa-google text-red-500 text-xl"></i>
-              </button>
-              <button className="bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-center hover:bg-gray-50 transition-colors duration-200 hover:scale-105 transform shadow-sm">
-                <i className="fab fa-facebook text-blue-600 text-xl"></i>
-              </button>
-              <button className="bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-center hover:bg-gray-50 transition-colors duration-200 hover:scale-105 transform shadow-sm">
-                <i className="fab fa-twitter text-blue-400 text-xl"></i>
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-8 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?
-              <a
-                href="#"
-                className="text-primary-500 hover:text-primary-600 font-semibold ml-1 transition-colors duration-200"
-              >
-                Sign up
-              </a>
-            </p>
-          </div>
-
           <div className="mt-6 pt-6 border-t border-gray-100">
             <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
-              <span className="material-symbols-outlined text-sm">shield</span>
-              <span>Secure login protected by SSL encryption</span>
+              <span>Secure login protected by firebase</span>
             </div>
           </div>
         </div>
