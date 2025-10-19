@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
-// import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { sendLoginLink } from "../../utils/emailAuth";
 import "../../main.css";
 

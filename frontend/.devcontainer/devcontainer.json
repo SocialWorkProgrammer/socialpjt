@@ -1,0 +1,8 @@
+{
+    "name": "test",
+    "dockerFile": "Dockerfile",
+    "context": "..",
+    "appPort": [5173],
+    "remoteUser": "node"
+  }
+  
