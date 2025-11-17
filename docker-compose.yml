@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      # 개발 시 코드 변경사항을 실시간으로 반영하기 위한 볼륨 마운트
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    networks:
+      - socialpjt-network
+
+networks:
+  socialpjt-network:
+    driver: bridge
