@@ -52,10 +52,13 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'backend_socialpjt.urls'
 
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'backend_socialpjt', 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -78,7 +81,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'database_socialpjt',
         'USER' : 'socialuser',
-        'PASSWORD' : 'socialpass', # 설정한 비밀번호로 적어주면 된다.
+        'PASSWORD' : '1234', # 설정한 비밀번호로 적어주면 된다.
         'HOST' : '127.0.0.1',
         'PORT' : '3306',
     }
@@ -120,3 +123,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+# Login redirect URL
+LOGIN_REDIRECT_URL = '/'
+
+AUTH_USER_MODEL = "accounts.CustomUser"
