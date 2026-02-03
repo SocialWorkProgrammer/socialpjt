@@ -12,7 +12,8 @@
       "driver": "MySQL",
       "name": "mysql_socialpjt",
       "database": "database_socialpjt",
-      "username": "socialuser"
+      "username": "socialuser",
+      "password": "1234"
     }
   ]
 }

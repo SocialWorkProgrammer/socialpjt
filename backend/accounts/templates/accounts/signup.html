@@ -1,0 +1,64 @@
+<!-- accounts>signup.html -->
+
+{% block content %}
+
+<h1>회원가입</h1>
+
+{% if form.non_field_errors %}
+<div style="color: red; margin-bottom: 1rem">
+  {% for error in form.non_field_errors %}
+  <p>{{ error }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'accounts:signup' %}">
+  {% csrf_token %}
+  <div>
+    <label for="email">이메일</label>
+    <input
+      type="email"
+      name="email"
+      id="email"
+      value="{{ form.email.value|default:'' }}"
+      placeholder="example@email.com"
+      autofocus
+    />
+    {% if form.email.errors %}
+    <span style="color: red">{{ form.email.errors.0 }}</span>
+    {% endif %}
+  </div>
+  <div>
+    <p>
+      비밀번호의 경우, 타 웹사이트와 전혀 다른 비밀번호를 사용해주시기
+      바랍니다.(크롬의 비밀번호 생성 기능 추천)
+    </p>
+    <label for="password1">비밀번호</label>
+    <input
+      type="password"
+      name="password1"
+      id="password1"
+      placeholder="8자 이상"
+    />
+    {% if form.password1.errors %}
+    <span style="color: red">{{ form.password1.errors.0 }}</span>
+    {% endif %}
+  </div>
+  <div>
+    <label for="password2">비밀번호 확인</label>
+    <input
+      type="password"
+      name="password2"
+      id="password2"
+      placeholder="비밀번호 다시 입력"
+    />
+    {% if form.password2.errors %}
+    <span style="color: red">{{ form.password2.errors.0 }}</span>
+    {% endif %}
+  </div>
+  <button type="submit">가입하기</button>
+</form>
+
+<p><a href="{% url 'accounts:login' %}">이미 계정이 있으신가요? 로그인</a></p>
+
+{% endblock %}
