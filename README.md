@@ -16,4 +16,4 @@ db : mysql
 
 ### ERD
 
-![ex_screenshot](./readme/ERD.png)
+![ex_screenshot](./readme/socialpjt_erd.png)
