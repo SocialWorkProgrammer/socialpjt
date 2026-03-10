@@ -1,0 +1,56 @@
+{% extends "community/base.html" %}
+{% block title %}{{ post.title }} - Community{% endblock %}
+{% block content %}
+<article class="card" style="margin-bottom: 1.5rem;">
+    <h2 style="margin-top: 0;">{{ post.title }}</h2>
+    <p class="muted">
+        작성자 {{ post.user.email }} · 조회수 {{ post.hit }} · {{ post.created_at|date:"Y-m-d H:i" }}
+        {% if post.is_image %} · 이미지 포함{% endif %}
+    </p>
+    <div style="line-height: 1.6;">{{ post.description|linebreaks }}</div>
+    {% if request.user == post.user %}
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+            <a class="btn ghost" href="{% url 'community:community_update' post.post_id %}">수정</a>
+            <form method="post" action="{% url 'community:community_delete' post.post_id %}">
+                {% csrf_token %}
+                <button class="btn primary" type="submit">삭제</button>
+            </form>
+        </div>
+    {% endif %}
+</article>
+
+<section class="card" style="margin-bottom: 1.5rem;">
+    <h3 style="margin-top: 0;">댓글</h3>
+    {% if post.comments.all %}
+        <div class="stack">
+            {% for comment in post.comments.all %}
+                <article style="border-bottom: 1px solid #f0f2f1; padding-bottom: 0.75rem;">
+                    <p>{{ comment.com_comment|linebreaks }}</p>
+                    <div class="muted">
+                        {{ comment.user.email }} · {{ comment.com_posted_at|date:"Y-m-d H:i" }}
+                    </div>
+                    {% if request.user == comment.user %}
+                        <form method="post" action="{% url 'community:comment_delete' post.post_id comment.comment_id %}">
+                            {% csrf_token %}
+                            <button class="btn ghost" style="margin-top: 0.5rem;" type="submit">댓글 삭제</button>
+                        </form>
+                    {% endif %}
+                </article>
+            {% empty %}
+                <p>첫 댓글을 남겨보세요!</p>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>댓글이 없습니다.</p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h3 style="margin-top: 0;">댓글 작성</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ comment_form.as_p }}
+        <button class="btn primary" type="submit">댓글 등록</button>
+    </form>
+</section>
+{% endblock %}
