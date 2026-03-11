@@ -1,0 +1,21 @@
+{% extends "news/base.html" %}
+{% block title %}복지 뉴스 목록{% endblock %}
+{% block content %}
+<section class="stack">
+    {% if news_items %}
+        {% for item in news_items %}
+            <article class="card">
+                <a href="{% url 'news:news_detail' item.news_id %}" class="card-link">
+                    <h2 style="margin-top:0;margin-bottom:0.35rem;">{{ item.title }}</h2>
+                    <p class="muted">게시일 {{ item.created_at }}</p>
+                    <p>{{ item.content|truncatechars:160 }}</p>
+                </a>
+            </article>
+        {% endfor %}
+    {% else %}
+        <article class="card">
+            <p>표시할 뉴스가 없습니다. 잠시 후 다시 시도해주세요.</p>
+        </article>
+    {% endif %}
+</section>
+{% endblock %}

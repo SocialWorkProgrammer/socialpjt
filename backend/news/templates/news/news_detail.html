@@ -1,0 +1,48 @@
+{% extends "news/base.html" %}
+{% block title %}{{ news.title }} - 복지 뉴스{% endblock %}
+{% block content %}
+<article class="card" style="margin-bottom:1.5rem;">
+    <h2 style="margin-top:0;">{{ news.title }}</h2>
+    <p class="muted">게시일 {{ news.created_at }} · 수집 {{ news.fetched_at|date:"Y-m-d H:i" }}</p>
+    <div style="line-height:1.7; white-space:pre-line;">{{ news.content }}</div>
+    <p style="margin-top:1rem;">
+        <a class="btn ghost" href="{{ news.source_url }}" target="_blank" rel="noopener">원문 열기</a>
+    </p>
+</article>
+
+<section class="card" style="margin-bottom:1.5rem;">
+    <h3 style="margin-top:0;">댓글</h3>
+    {% if comments %}
+        <div class="stack">
+            {% for comment in comments %}
+                <article style="border-bottom:1px solid #eef3fa; padding-bottom:0.8rem;">
+                    <p>{{ comment.content|linebreaks }}</p>
+                    <div class="muted">{{ comment.user.email }} · {{ comment.created_at|date:"Y-m-d H:i" }}</div>
+                    {% if request.user == comment.user %}
+                        <form method="post" action="{% url 'news:comment_delete' news.news_id comment.comment_id %}">
+                            {% csrf_token %}
+                            <button class="btn ghost" style="margin-top:0.4rem;" type="submit">삭제</button>
+                        </form>
+                    {% endif %}
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>첫 댓글을 남겨보세요!</p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h3 style="margin-top:0;">댓글 작성</h3>
+    {% if request.user.is_authenticated %}
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn primary" type="submit">등록</button>
+        </form>
+    {% else %}
+        <p>로그인 후 댓글을 남길 수 있습니다.</p>
+        <a class="btn primary" href="{% url 'login' %}?next={{ request.path }}">로그인하기</a>
+    {% endif %}
+</section>
+{% endblock %}
