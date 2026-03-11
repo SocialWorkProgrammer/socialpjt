@@ -1,0 +1,13 @@
+{% extends "community/base.html" %}
+{% block title %}게시글 삭제{% endblock %}
+{% block content %}
+<section class="card">
+    <h2 style="margin-top: 0;">게시글 삭제</h2>
+    <p>정말로 "{{ post.title }}" 글을 삭제하시겠습니까?</p>
+    <form method="post" style="display: inline-block;">
+        {% csrf_token %}
+        <button class="btn primary" type="submit">삭제</button>
+    </form>
+    <a class="btn ghost" href="{% url 'community:community_detail' post.post_id %}">취소</a>
+</section>
+{% endblock %}

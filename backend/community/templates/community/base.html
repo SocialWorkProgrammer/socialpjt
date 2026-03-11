@@ -1,0 +1,94 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Community Board{% endblock %}</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: 'Noto Sans KR', Arial, sans-serif;
+            --primary: #0a6b52;
+            --accent: #f3faf7;
+            --border: #d7e2dd;
+        }
+        body {
+            background: var(--accent);
+            margin: 0;
+            min-height: 100vh;
+        }
+        header {
+            background: var(--primary);
+            color: #fff;
+            padding: 1rem 1.5rem;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        nav a {
+            color: #fff;
+            margin-right: 1rem;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        .card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 10px 30px rgba(10, 107, 82, 0.07);
+        }
+        .muted { color: #6b7c74; font-size: 0.9rem; }
+        .stack { display: flex; flex-direction: column; gap: 1rem; }
+        .btn {
+            border: none;
+            border-radius: 8px;
+            padding: 0.55rem 1.1rem;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+        .btn.primary { background: var(--primary); color: #fff; }
+        .btn.ghost { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        form { display: flex; flex-direction: column; gap: 0.75rem; }
+        input[type="text"], textarea {
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 0.65rem 0.8rem;
+            font-size: 1rem;
+        }
+        .messages { margin-bottom: 1rem; padding: 0; list-style: none; }
+        .messages li { background: #fff5cb; border: 1px solid #ffe08a; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; }
+        @media (max-width: 640px) {
+            main { padding: 1rem; }
+            nav a { display: inline-block; margin-bottom: 0.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>커뮤니티 게시판</h1>
+        <nav>
+            <a href="{% url 'community:community_list' %}">전체 글</a>
+            <a href="{% url 'community:community_create' %}">글 작성</a>
+            <a href="{% url 'main' %}">메인으로</a>
+        </nav>
+    </header>
+    <main>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

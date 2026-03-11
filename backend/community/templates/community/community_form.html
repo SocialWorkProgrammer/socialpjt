@@ -1,0 +1,19 @@
+{% extends "community/base.html" %}
+{% block title %}{% if is_edit %}게시글 수정{% else %}게시글 작성{% endif %}{% endblock %}
+{% block content %}
+<section class="card">
+    <h2 style="margin-top: 0;">
+        {% if is_edit %}게시글 수정{% else %}새 게시글 작성{% endif %}
+    </h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn primary" type="submit">저장</button>
+            <a class="btn ghost" href="{% if is_edit %}{% url 'community:community_detail' post.post_id %}{% else %}{% url 'community:community_list' %}{% endif %}">
+                취소
+            </a>
+        </div>
+    </form>
+</section>
+{% endblock %}
