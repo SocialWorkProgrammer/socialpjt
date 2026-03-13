@@ -136,3 +136,7 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 
 PUBLIC_API_KEY = os.getenv("PUBLIC_API_KEY", "")
 SOCIAL_SERVICE_API_KEY = os.getenv("SOCIAL_SERVICE_API_KEY", "")
+
+SERVICE_LLM_MODE = os.getenv("SERVICE_LLM_MODE", "stub")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
