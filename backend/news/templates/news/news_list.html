@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>복지 뉴스</title>
+</head>
+<body>
+    <h1>복지 뉴스</h1>
+    {% if news_items %}
+        <ul>
+            {% for item in news_items %}
+                <li><a href="{{ item.source_url }}" target="_blank" rel="noopener">{{ item.title }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>뉴스 데이터가 없습니다.</p>
+    {% endif %}
+    <p><a href="{% url 'services:service_list' %}">사회서비스 게시판으로 이동</a></p>
+    <p><a href="{% url 'main' %}">메인으로 이동</a></p>
+</body>
+</html>

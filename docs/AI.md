@@ -306,6 +306,28 @@ curl http://localhost:11434/api/generate \
 - Primary: Gemini 2.0 Flash
 - Fallback: Qwen 무료 라우트
 
+프로젝트 설정값(`.env`) 예시:
+
+```env
+SERVICE_LLM_MODE=gemini
+SERVICE_LLM_FALLBACK_MODE=openrouter
+
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=gemini-2.0-flash
+
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=qwen/qwen3-8b:free
+```
+
+로컬 사용 시:
+
+```env
+SERVICE_LLM_MODE=ollama
+SERVICE_LLM_FALLBACK_MODE=stub
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen2.5:7b-instruct
+```
+
 ### 라우팅 의사코드
 
 ```text

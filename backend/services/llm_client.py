@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -23,6 +24,10 @@ class BaseLLMClient:
         candidates: list[dict[str, str]],
     ) -> LLMResult:
         raise NotImplementedError
+
+
+class LLMClientError(RuntimeError):
+    pass
 
 
 class StubLLMClient(BaseLLMClient):
@@ -91,11 +96,158 @@ class OllamaLLMClient(BaseLLMClient):
         return LLMResult(provider=self.provider, used_fallback=False, message=text)
 
 
-def get_llm_client() -> BaseLLMClient:
-    mode = getattr(settings, "SERVICE_LLM_MODE", "stub")
+class GeminiLLMClient(BaseLLMClient):
+    provider = "gemini"
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def generate_recommendation(
+        self,
+        profile: dict[str, str],
+        candidates: list[dict[str, str]],
+    ) -> LLMResult:
+        prompt = build_recommendation_prompt(profile=profile, candidates=candidates)
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
+        payload = json.dumps(
+            {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.2},
+            }
+        ).encode("utf-8")
+        request = Request(
+            url=url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=40) as response:  # noqa: S310
+                raw = response.read().decode("utf-8", errors="ignore")
+        except (HTTPError, URLError) as exc:
+            raise LLMClientError(f"gemini 요청 실패: {exc}") from exc
+
+        data = json.loads(raw)
+        text = ""
+        candidates_data = data.get("candidates") or []
+        if candidates_data:
+            parts = (((candidates_data[0] or {}).get("content") or {}).get("parts") or [])
+            if parts:
+                text = str((parts[0] or {}).get("text", "")).strip()
+        if not text:
+            raise LLMClientError("gemini 응답 본문이 비어 있습니다.")
+        return LLMResult(provider=self.provider, used_fallback=False, message=text)
+
+
+class OpenRouterLLMClient(BaseLLMClient):
+    provider = "openrouter"
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def generate_recommendation(
+        self,
+        profile: dict[str, str],
+        candidates: list[dict[str, str]],
+    ) -> LLMResult:
+        prompt = build_recommendation_prompt(profile=profile, candidates=candidates)
+        payload = json.dumps(
+            {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "사회복지 상담 보조 추천 AI로 동작하고 후보 외 추정을 금지한다.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.2,
+            }
+        ).encode("utf-8")
+        request = Request(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=40) as response:  # noqa: S310
+                raw = response.read().decode("utf-8", errors="ignore")
+        except (HTTPError, URLError) as exc:
+            raise LLMClientError(f"openrouter 요청 실패: {exc}") from exc
+
+        data = json.loads(raw)
+        text = ""
+        choices = data.get("choices") or []
+        if choices:
+            message = (choices[0] or {}).get("message") or {}
+            text = str(message.get("content", "")).strip()
+        if not text:
+            raise LLMClientError("openrouter 응답 본문이 비어 있습니다.")
+        return LLMResult(provider=self.provider, used_fallback=False, message=text)
+
+
+class FallbackLLMClient(BaseLLMClient):
+    provider = "fallback"
+
+    def __init__(self, primary: BaseLLMClient, fallback: BaseLLMClient) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def generate_recommendation(
+        self,
+        profile: dict[str, str],
+        candidates: list[dict[str, str]],
+    ) -> LLMResult:
+        try:
+            return self.primary.generate_recommendation(profile=profile, candidates=candidates)
+        except Exception:
+            fallback_result = self.fallback.generate_recommendation(
+                profile=profile,
+                candidates=candidates,
+            )
+            fallback_result.used_fallback = True
+            return fallback_result
+
+
+def _build_from_mode(mode: str) -> BaseLLMClient:
     if mode == "ollama":
         return OllamaLLMClient(
             endpoint=getattr(settings, "OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
             model=getattr(settings, "OLLAMA_MODEL", "qwen2.5:7b-instruct"),
         )
+    if mode == "gemini":
+        api_key = getattr(settings, "GEMINI_API_KEY", "")
+        if not api_key:
+            raise LLMClientError("GEMINI_API_KEY가 설정되지 않았습니다.")
+        return GeminiLLMClient(
+            api_key=api_key,
+            model=getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash"),
+        )
+    if mode == "openrouter":
+        api_key = getattr(settings, "OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise LLMClientError("OPENROUTER_API_KEY가 설정되지 않았습니다.")
+        return OpenRouterLLMClient(
+            api_key=api_key,
+            model=getattr(settings, "OPENROUTER_MODEL", "qwen/qwen3-8b:free"),
+        )
     return StubLLMClient()
+
+
+def get_llm_client() -> BaseLLMClient:
+    mode = getattr(settings, "SERVICE_LLM_MODE", "stub")
+    fallback_mode = getattr(settings, "SERVICE_LLM_FALLBACK_MODE", "")
+    primary = _build_from_mode(mode)
+    if fallback_mode:
+        fallback = _build_from_mode(fallback_mode)
+        return FallbackLLMClient(primary=primary, fallback=fallback)
+    return primary

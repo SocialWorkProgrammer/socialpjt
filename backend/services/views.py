@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, render
 
-from .llm_client import get_llm_client
+from .llm_client import LLMClientError, get_llm_client
 from .models import ServiceFetchStatus, SocialService
 from .privacy import normalize_profile
 from .retrieval import retrieve_candidate_services, serialize_candidates
@@ -77,11 +77,29 @@ def chat_recommendation(request):
     candidates = retrieve_candidate_services(profile=profile, limit=5)
     candidate_payload = serialize_candidates(candidates)
 
-    llm_client = get_llm_client()
-    llm_result = llm_client.generate_recommendation(
-        profile=profile,
-        candidates=candidate_payload,
-    )
+    try:
+        llm_client = get_llm_client()
+        llm_result = llm_client.generate_recommendation(
+            profile=profile,
+            candidates=candidate_payload,
+        )
+    except Exception as exc:
+        fallback_message = "AI 응답 생성에 실패해 검색 결과만 제공합니다."
+        if isinstance(exc, LLMClientError):
+            fallback_message = f"AI 설정 오류: {exc}"
+        return JsonResponse(
+            {
+                "profile": profile,
+                "recommendations": candidate_payload,
+                "llm": {
+                    "provider": "none",
+                    "used_fallback": False,
+                    "message": fallback_message,
+                },
+                "disclaimer": "추천 결과는 참고용이며 최종 판단은 사회복지사 검토가 필요합니다.",
+            },
+            status=200,
+        )
 
     return JsonResponse(
         {
