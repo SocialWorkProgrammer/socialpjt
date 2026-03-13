@@ -140,7 +140,7 @@
 - `backend/services/prompts.py`
   - 추천용 프롬프트 생성
 - `backend/services/llm_client.py`
-  - LLM 어댑터(stub/ollama)
+  - LLM 어댑터(stub/ollama/gemini/openrouter + fallback)
 - `backend/services/views.py`
   - `chat_recommendation` API 엔드포인트
 - `backend/services/urls.py`
@@ -485,3 +485,168 @@ if both fail:
 - 온라인 무료 모델을 쓸 경우에도 비식별화는 필수
 - 품질은 모델 자체보다 검색 데이터 품질과 프롬프트/출력 구조가 더 크게 좌우됨
 - 따라서 "검색 정확도 -> LLM 설명" 순서로 설계하면 실패 확률이 낮음
+
+---
+
+## 13) 현재 구현 완료 상태 (최신)
+
+아래 항목은 실제 코드로 반영된 상태다.
+
+### 13-1. 사회서비스 게시판/수집
+- `services` 앱 생성 및 라우팅 연결
+- `SocialService`, `ServiceFetchStatus` 모델 추가
+- `fetch_social_services` 관리명령 추가
+  - 중앙부처복지서비스: 목록 + 상세(XML)
+  - 지자체복지서비스: 목록/상세(JSON/XML 혼합 대응)
+  - 복지서비스정보(odcloud): 목록(JSON)
+- `external_id + source` 기준 중복 방지(`update_or_create`)
+- 일별 수집 상태 저장
+
+### 13-2. AI 추천 API
+- 엔드포인트: `POST /services/chat/`
+- 처리 흐름:
+  1) 입력 JSON 파싱
+  2) 비식별/마스킹(`privacy.py`)
+  3) 후보 검색/정렬(`retrieval.py`)
+  4) LLM 생성(`llm_client.py`)
+  5) JSON 응답 반환
+- 미로그인 사용자는 접근 제한(로그인 필요)
+
+### 13-3. LLM 모드
+- `stub`: LLM 없이 후보 요약 문장 반환(개발 기본 모드)
+- `ollama`: 로컬 모델 호출
+- `gemini`: Google Generative Language API 호출
+- `openrouter`: OpenRouter 모델 호출
+- fallback: `SERVICE_LLM_FALLBACK_MODE` 설정 시 자동 전환
+
+### 13-4. UI
+- `services` 목록 화면에 AI 추천 폼 추가
+- 입력: 연령대/지역/대상/생애주기/관심주제/비식별 메모
+- 결과: LLM 응답 + 후보 서비스 목록 + 디스클레이머
+
+### 13-5. 문서
+- `docs/social-service-field-mapping.md` 필드 매핑표 정리
+- `docs/AI.md` 구축/운영 전체 가이드 정리
+
+---
+
+## 14) 즉시 실행 절차 (처음부터 따라하기)
+
+## 14-1. 환경 변수 준비
+
+`.env` 예시(최소):
+
+```env
+DJANGO_SECRET_KEY=your-secret
+DJANGO_DEBUG=True
+
+SOCIAL_SERVICE_API_KEY=your-public-data-key
+PUBLIC_API_KEY=
+
+SERVICE_LLM_MODE=stub
+SERVICE_LLM_FALLBACK_MODE=
+```
+
+온라인 모드 예시(Primary + Fallback):
+
+```env
+SERVICE_LLM_MODE=gemini
+SERVICE_LLM_FALLBACK_MODE=openrouter
+
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=gemini-2.0-flash
+
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=qwen/qwen3-8b:free
+```
+
+로컬 모드 예시(Ollama):
+
+```env
+SERVICE_LLM_MODE=ollama
+SERVICE_LLM_FALLBACK_MODE=stub
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen2.5:7b-instruct
+```
+
+## 14-2. 서버 실행
+
+```bash
+cd /home/minho/socialpjt/backend
+python3 -m pip install -r requirements.txt
+python3 manage.py migrate
+python3 manage.py runserver
+```
+
+## 14-3. 데이터 수집
+
+```bash
+python3 manage.py fetch_social_services --max-pages 1 --num-of-rows 20
+```
+
+## 14-4. AI API 테스트
+
+브라우저 로그인 후 `services` 목록 화면에서 폼으로 테스트하는 방법이 가장 간단하다.
+
+API 직접 호출 예시(curl):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/services/chat/" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRFToken: <csrf_token>" \
+  -b "sessionid=<session_id>; csrftoken=<csrf_token>" \
+  -d '{
+    "age_group": "노년",
+    "region_ctpv": "서울특별시",
+    "region_sgg": "송파구",
+    "target_type": "저소득",
+    "life_stage": "노년",
+    "interest_theme": "신체건강",
+    "special_notes": "연락처 010-1234-5678, 거동이 불편"
+  }'
+```
+
+---
+
+## 15) 현재 코드 구조(파일별 역할)
+
+- `backend/services/privacy.py`
+  - `mask_sensitive_text`: 기본 민감정보 패턴 마스킹
+  - `normalize_profile`: 입력 스키마 정규화
+- `backend/services/retrieval.py`
+  - 프로파일 기반 후보 서비스 검색/점수화/직렬화
+- `backend/services/prompts.py`
+  - 추천 프롬프트 생성(근거 중심 출력 유도)
+- `backend/services/llm_client.py`
+  - provider 별 호출 어댑터 + fallback 클라이언트
+- `backend/services/views.py`
+  - `chat_recommendation` API 오케스트레이션
+- `backend/services/templates/services/service_list.html`
+  - AI 폼 입력 및 결과 렌더링
+
+---
+
+## 16) 리스크 및 다음 보완 우선순위
+
+### 16-1. 리스크 5개
+1. 마스킹 패턴 누락 가능성
+2. 규칙 기반 검색 점수의 정확도 편차
+3. fallback 발생 원인 관측성 부족
+4. 온라인 LLM 모드 오설정 시 외부 전송 리스크
+5. provider/fallback 분기 테스트 커버리지 부족
+
+### 16-2. 우선 보완 순서(권장)
+1. 마스킹 강화 + 실패 시 전송 차단(fail-closed)
+2. LLM 호출/실패/폴백 구조화 로그 추가
+3. `ALLOW_EXTERNAL_LLM` 같은 운영 게이트 추가
+4. 검색 가중치 튜닝(테스트셋 20~30개 기반)
+5. `llm_client` 모킹 테스트 확장
+
+---
+
+## 17) 운영 체크 포인트
+
+- AI 답변은 항상 "추천 + 근거 + 링크 + 디스클레이머" 포맷 유지
+- 상담 원문은 내부 저장, LLM에는 비식별 프로파일만 전달
+- 무료 온라인 모델 사용 시 quota/지연 대비 fallback 유지
+- daily 수집 실패는 `ServiceFetchStatus`로 모니터링
