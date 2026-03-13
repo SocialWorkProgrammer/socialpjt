@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,10 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-79o@5#6xv)v^^-fmwfelf)+cjup4+re2k$aoedlljj638#8f%9'
+SECRET_KEY = os.getenv(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-79o@5#6xv)v^^-fmwfelf)+cjup4+re2k$aoedlljj638#8f%9'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = []
 
@@ -38,6 +42,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'accounts',
+    'community',
+    'news',
+    'services',
 ]
 
 MIDDLEWARE = [
@@ -52,7 +59,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'backend_socialpjt.urls'
 
-import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TEMPLATES = [
@@ -127,3 +133,6 @@ STATIC_URL = 'static/'
 LOGIN_REDIRECT_URL = '/'
 
 AUTH_USER_MODEL = "accounts.CustomUser"
+
+PUBLIC_API_KEY = os.getenv("PUBLIC_API_KEY", "")
+SOCIAL_SERVICE_API_KEY = os.getenv("SOCIAL_SERVICE_API_KEY", "")

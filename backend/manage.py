@@ -1,11 +1,24 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import importlib
 import os
 import sys
+from pathlib import Path
+
+
+def load_env():
+    """Load environment variables from the project .env file if possible."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    try:
+        load_dotenv = importlib.import_module("dotenv").load_dotenv
+    except ModuleNotFoundError:
+        return
+    load_dotenv(env_path)
 
 
 def main():
     """Run administrative tasks."""
+    load_env()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend_socialpjt.settings')
     try:
         from django.core.management import execute_from_command_line

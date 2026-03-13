@@ -1,0 +1,68 @@
+{% extends "services/base.html" %}
+{% block title %}사회서비스 목록{% endblock %}
+{% block content %}
+<section class="card" style="margin-bottom: 1rem;">
+    <form method="get" class="inline-grid">
+        <label>
+            <span class="muted">키워드</span>
+            <input type="text" name="q" value="{{ keyword }}" placeholder="서비스명 검색">
+        </label>
+        <label>
+            <span class="muted">출처</span>
+            <select name="source">
+                <option value="">전체</option>
+                {% for value, label in source_choices %}
+                    <option value="{{ value }}" {% if source == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            <span class="muted">카테고리(코드/이름)</span>
+            <input type="text" name="category" value="{{ category }}" placeholder="예: 010 또는 신체건강">
+        </label>
+        <label>
+            <span class="muted">지역</span>
+            <input type="text" name="region" value="{{ region }}" placeholder="예: 서울특별시">
+        </label>
+        <button class="btn primary" type="submit">검색</button>
+    </form>
+</section>
+
+<section class="stack">
+    {% for service in page_obj %}
+        <article class="card">
+            <h2 style="margin:0 0 0.45rem 0;">
+                <a href="{% url 'services:service_detail' service.social_service_id %}" style="text-decoration:none;color:inherit;">
+                    {{ service.title }}
+                </a>
+            </h2>
+            <p class="muted" style="margin-top:0;">
+                {{ service.get_source_display }}
+                {% if service.region_ctpv %} · {{ service.region_ctpv }}{% endif %}
+                {% if service.region_sgg %} {{ service.region_sgg }}{% endif %}
+                {% if service.last_modified %} · 수정 {{ service.last_modified }}{% endif %}
+            </p>
+            <p style="margin:0.4rem 0 0.65rem 0;">{{ service.summary|default:"요약 정보가 없습니다."|truncatechars:180 }}</p>
+            {% if service.theme_codes %}<span class="badge">테마코드 {{ service.theme_codes }}</span>{% endif %}
+            {% if service.theme_names %}<span class="badge">테마 {{ service.theme_names }}</span>{% endif %}
+            {% if service.support_type %}<span class="badge">지원 {{ service.support_type }}</span>{% endif %}
+        </article>
+    {% empty %}
+        <article class="card">
+            <p>조건에 맞는 사회서비스 정보가 없습니다.</p>
+        </article>
+    {% endfor %}
+</section>
+
+{% if page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination" aria-label="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?q={{ keyword }}&source={{ source }}&category={{ category }}&region={{ region }}&page={{ page_obj.previous_page_number }}">이전</a>
+        {% endif %}
+        <span class="muted" style="align-self:center;">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?q={{ keyword }}&source={{ source }}&category={{ category }}&region={{ region }}&page={{ page_obj.next_page_number }}">다음</a>
+        {% endif %}
+    </nav>
+{% endif %}
+{% endblock %}

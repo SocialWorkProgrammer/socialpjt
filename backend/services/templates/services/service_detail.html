@@ -1,0 +1,58 @@
+{% extends "services/base.html" %}
+{% block title %}{{ service.title }} - 사회서비스{% endblock %}
+{% block content %}
+<article class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">{{ service.title }}</h2>
+    <p class="muted" style="margin-top:0;">
+        {{ service.get_source_display }}
+        {% if service.external_id %} · ID {{ service.external_id }}{% endif %}
+    </p>
+    <p style="line-height:1.7; white-space:pre-line;">{{ service.summary|default:"요약 정보가 없습니다." }}</p>
+    {% if service.detail_url %}
+        <p><a class="btn ghost" href="{{ service.detail_url }}" target="_blank" rel="noopener">상세 페이지 열기</a></p>
+    {% endif %}
+</article>
+
+<section class="card" style="margin-bottom:1rem;">
+    <h3 style="margin-top:0;">상세 정보</h3>
+    <p><strong>소관부처:</strong> {{ service.ministry|default:"-" }}</p>
+    <p><strong>소관조직:</strong> {{ service.organization|default:"-" }}</p>
+    <p><strong>담당부서:</strong> {{ service.department|default:"-" }}</p>
+    <p><strong>지역:</strong> {{ service.region_ctpv|default:"-" }} {{ service.region_sgg|default:"" }}</p>
+    <p><strong>지원주기:</strong> {{ service.support_cycle|default:"-" }}</p>
+    <p><strong>지원유형:</strong> {{ service.support_type|default:"-" }}</p>
+    <p><strong>신청방법:</strong> {{ service.apply_method_name|default:"-" }}</p>
+    <p><strong>온라인신청:</strong>
+        {% if service.online_applicable is None %}-
+        {% elif service.online_applicable %}가능
+        {% else %}불가능
+        {% endif %}
+    </p>
+    <p><strong>생애주기 코드:</strong> {{ service.life_codes|default:"-" }}</p>
+    <p><strong>가구유형 코드:</strong> {{ service.target_codes|default:"-" }}</p>
+    <p><strong>관심주제 코드:</strong> {{ service.theme_codes|default:"-" }}</p>
+    <p><strong>생애주기명:</strong> {{ service.life_names|default:"-" }}</p>
+    <p><strong>가구유형명:</strong> {{ service.target_names|default:"-" }}</p>
+    <p><strong>관심주제명:</strong> {{ service.theme_names|default:"-" }}</p>
+</section>
+
+<section class="card" style="margin-bottom:1rem;">
+    <h3 style="margin-top:0;">지원/신청 조건</h3>
+    <p><strong>지원대상:</strong></p>
+    <p style="white-space:pre-line;">{{ service.target_detail|default:"-" }}</p>
+    <p><strong>선정기준:</strong></p>
+    <p style="white-space:pre-line;">{{ service.selection_criteria|default:"-" }}</p>
+    <p><strong>지원내용:</strong></p>
+    <p style="white-space:pre-line;">{{ service.benefit_detail|default:"-" }}</p>
+    <p><strong>신청 상세:</strong></p>
+    <p style="white-space:pre-line;">{{ service.apply_method_detail|default:"-" }}</p>
+</section>
+
+<section class="card">
+    <h3 style="margin-top:0;">기타</h3>
+    <p><strong>대표문의:</strong> {{ service.contact|default:"-" }}</p>
+    <p><strong>기준연도:</strong> {{ service.base_year|default:"-" }}</p>
+    <p><strong>최종수정일:</strong> {{ service.last_modified|default:"-" }}</p>
+    <p><strong>수집일시:</strong> {{ service.fetched_at|date:"Y-m-d H:i" }}</p>
+</section>
+{% endblock %}

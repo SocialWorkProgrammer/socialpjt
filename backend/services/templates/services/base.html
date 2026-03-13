@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}사회서비스 정보{% endblock %}</title>
+    <style>
+        :root {
+            font-family: 'Noto Sans KR', Arial, sans-serif;
+            --primary: #156050;
+            --ink: #1d312c;
+            --line: #cfe0da;
+            --bg1: #f5fbf8;
+            --bg2: #e8f5ef;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--ink);
+            background: linear-gradient(135deg, var(--bg1), var(--bg2));
+        }
+        header {
+            background: var(--primary);
+            color: #fff;
+            padding: 1rem 1.5rem;
+        }
+        header h1 { margin: 0; font-size: 1.45rem; }
+        nav { margin-top: 0.35rem; }
+        nav a {
+            color: #e6fff8;
+            text-decoration: none;
+            margin-right: 1rem;
+            font-weight: 600;
+        }
+        main {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        .card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 1.15rem;
+            box-shadow: 0 16px 36px rgba(21, 96, 80, 0.08);
+        }
+        .stack { display: flex; flex-direction: column; gap: 0.9rem; }
+        .muted { color: #5f7870; font-size: 0.92rem; }
+        .badge {
+            display: inline-block;
+            font-size: 0.8rem;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            border: 1px solid #b5d4ca;
+            margin-right: 0.3rem;
+            margin-bottom: 0.25rem;
+            background: #f3fbf8;
+        }
+        .btn {
+            border: none;
+            border-radius: 8px;
+            padding: 0.52rem 1rem;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+        .btn.primary { background: var(--primary); color: #fff; }
+        .btn.ghost { background: #fff; border: 1px solid var(--primary); color: var(--primary); }
+        form.inline-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.55rem;
+            align-items: end;
+        }
+        input[type="text"], select {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.55rem 0.7rem;
+            font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.45rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        .pagination a {
+            text-decoration: none;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.45rem 0.7rem;
+            color: var(--ink);
+            background: #fff;
+        }
+        @media (max-width: 760px) {
+            main { padding: 1rem; }
+            form.inline-grid { grid-template-columns: 1fr; }
+            nav a { display: inline-block; margin-bottom: 0.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>사회서비스 게시판</h1>
+        <nav>
+            <a href="{% url 'services:service_list' %}">서비스 목록</a>
+            <a href="{% url 'news:news_list' %}">복지 뉴스</a>
+            <a href="{% url 'community:community_list' %}">커뮤니티</a>
+            <a href="{% url 'main' %}">메인으로</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    {% if failure_message %}
+        <script>
+            (function() {
+                const message = "{{ failure_message|escapejs }}";
+                if (message) {
+                    alert(message);
+                }
+            })();
+        </script>
+    {% endif %}
+</body>
+</html>
