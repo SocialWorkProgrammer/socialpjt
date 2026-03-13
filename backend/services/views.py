@@ -1,8 +1,8 @@
 import json
 import logging
+from typing import Any
 from datetime import date
 
-from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -15,6 +15,56 @@ from .retrieval import retrieve_candidate_services, serialize_candidates
 
 
 logger = logging.getLogger(__name__)
+
+
+def _auth_required_json_response():
+    """API 요청에 대한 공통 인증 실패 응답을 반환한다."""
+
+    return JsonResponse(
+        {
+            "ok": False,
+            "error": {
+                "code": "authentication_required",
+                "message": "로그인이 필요합니다.",
+            },
+        },
+        status=401,
+    )
+
+
+def _to_positive_int(raw_value: str | None, default: int, min_value: int = 1, max_value: int = 50) -> int:
+    try:
+        value = int(raw_value or "")
+    except (TypeError, ValueError):
+        return default
+    if value < min_value:
+        return default
+    if value > max_value:
+        return max_value
+    return value
+
+
+def _serialize_service_item(item: Any) -> dict[str, Any]:
+    return {
+        "id": item.social_service_id,
+        "source": item.source,
+        "source_label": item.get_source_display() if hasattr(item, "get_source_display") else item.source,
+        "external_id": item.external_id,
+        "title": item.title,
+        "summary": item.summary,
+        "detail_url": item.detail_url,
+        "site_url": item.site_url,
+        "region_ctpv": item.region_ctpv,
+        "region_sgg": item.region_sgg,
+        "target_names": item.target_names,
+        "theme_names": item.theme_names,
+        "life_names": item.life_names,
+        "apply_method_name": item.apply_method_name,
+        "support_type": item.support_type,
+        "fetched_at": item.fetched_at.isoformat() if item.fetched_at else None,
+        "online_applicable": item.online_applicable,
+        "view_count": item.view_count,
+    }
 
 
 def _today_failure_message() -> str | None:
@@ -57,6 +107,48 @@ def service_list(request):
     return render(request, "services/service_list.html", context)
 
 
+def service_list_api(request):
+    """서비스 목록 조회 전용 API."""
+
+    if not request.user.is_authenticated:
+        return _auth_required_json_response()
+
+    keyword = request.GET.get("q", "").strip()
+    source = request.GET.get("source", "").strip()
+    category = request.GET.get("category", "").strip()
+    region = request.GET.get("region", "").strip()
+    page = _to_positive_int(request.GET.get("page"), 1)
+    page_size = _to_positive_int(request.GET.get("page_size"), 12)
+
+    queryset = SocialService.objects.all()
+    if keyword:
+        queryset = queryset.filter(title__icontains=keyword)
+    if source:
+        queryset = queryset.filter(source=source)
+    if category:
+        queryset = queryset.filter(theme_names__icontains=category)
+    if region:
+        queryset = queryset.filter(region_ctpv__icontains=region)
+
+    paginator = Paginator(queryset, page_size)
+    page_obj = paginator.get_page(page)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "items": [_serialize_service_item(service) for service in page_obj.object_list],
+            "pagination": {
+                "page": page_obj.number,
+                "page_size": page_size,
+                "total_count": paginator.count,
+                "total_pages": paginator.num_pages,
+                "has_previous": page_obj.has_previous(),
+                "has_next": page_obj.has_next(),
+            },
+        }
+    )
+
+
 def service_detail(request, service_id):
     service = get_object_or_404(SocialService, pk=service_id)
     return render(
@@ -69,9 +161,29 @@ def service_detail(request, service_id):
     )
 
 
-@login_required
+def service_detail_api(request, service_id: int):
+    """서비스 상세 조회 전용 API."""
+
+    if not request.user.is_authenticated:
+        return _auth_required_json_response()
+
+    service = get_object_or_404(SocialService, pk=service_id)
+    return JsonResponse({"ok": True, "item": _serialize_service_item(service)})
+
+
 @require_POST
 def chat_recommendation(request):
+    if not request.user.is_authenticated:
+        return _auth_required_json_response()
+
+    return recommend_services(request)
+
+
+@require_POST
+def recommend_services(request):
+    if not request.user.is_authenticated:
+        return _auth_required_json_response()
+
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except (json.JSONDecodeError, UnicodeDecodeError):

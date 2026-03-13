@@ -14,8 +14,10 @@ from . import views
 # question_id 값이 pk로 바뀌었는데, 이는 제너릭 뷰에서는 pk를 사용하기 때문이다. 
 app_name = "accounts"
 urlpatterns = [
+    path("me/", views.SessionView, name="session"),
     path("login/", views.LoginView, name="login"),
     path("signup/", views.SignUpView, name="signup"),
+    path("logout/", views.LogoutView, name="ajax_logout"),
     # path("<int:pk>/", views.DetailView.as_view(), name="logout"),
     # path("<int:pk>/results/", views.ResultsView.as_view(), name="signin"),
     # path("<int:question_id>/vote/", views.vote, name="signout"),
