@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../types/http";
@@ -6,8 +6,8 @@ import {
   getRecommendation,
   getService,
   getServices,
-  RecommendationPayload,
-  SocialServiceItem,
+  type RecommendationPayload,
+  type SocialServiceItem,
 } from "../../api/services";
 
 function EmptyState() {

@@ -18,6 +18,6 @@ export class ApiError extends Error {
   }
 }
 
-export type ApiOptions = Omit<RequestInit, "body" | "method" | "headers"> & {
+export type ApiOptions = Omit<RequestInit, "body" | "method"> & {
   query?: Record<string, string | number | boolean | undefined | null>;
 };

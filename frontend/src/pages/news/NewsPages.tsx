@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../types/http";
-import { getNewsDetail, getNewsList, NewsItem } from "../../api/news";
+import { getNewsDetail, getNewsList, type NewsItem } from "../../api/news";
 
 type NewsListState = {
   items: NewsItem[];

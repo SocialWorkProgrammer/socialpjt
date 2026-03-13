@@ -1,10 +1,10 @@
 import {
   createContext,
-  ReactNode,
   useCallback,
   useContext,
   useEffect,
   useState,
+  type ReactNode,
 } from "react";
 
 import { getSession, loginWithSession, logoutSession, signupWithSession } from "../api/auth";
@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

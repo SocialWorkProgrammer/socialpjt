@@ -1,8 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../types/http";
-import { CommunityItem, getCommunityDetail, getCommunityList } from "../../api/community";
+import {
+  getCommunityDetail,
+  getCommunityList,
+  type CommunityItem,
+} from "../../api/community";
 
 type CommunityState = {
   items: CommunityItem[];
