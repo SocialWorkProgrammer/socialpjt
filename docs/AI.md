@@ -650,3 +650,56 @@ curl -X POST "http://127.0.0.1:8000/services/chat/" \
 - 상담 원문은 내부 저장, LLM에는 비식별 프로파일만 전달
 - 무료 온라인 모델 사용 시 quota/지연 대비 fallback 유지
 - daily 수집 실패는 `ServiceFetchStatus`로 모니터링
+
+---
+
+## 18) 보안 강화 반영 사항 (최신)
+
+이번 단계에서 아래 항목을 실제 코드에 반영했다.
+
+### 18-1. 외부 LLM 차단 게이트
+- 기본값: 외부 LLM 사용 차단
+- 설정 키: `ALLOW_EXTERNAL_LLM`
+  - `false`(기본): `gemini`, `openrouter` 모드 차단
+  - `true`: 외부 LLM 모드 허용
+- 목적: 운영 실수로 외부 전송이 켜지는 상황 방지
+
+`.env` 예시:
+
+```env
+ALLOW_EXTERNAL_LLM=false
+```
+
+외부 LLM이 필요한 경우에만:
+
+```env
+ALLOW_EXTERNAL_LLM=true
+SERVICE_LLM_MODE=gemini
+```
+
+### 18-2. fail-closed 정책
+- 입력값에서 민감정보 패턴(연락처/주소/주민번호/계좌/금액 등)을 탐지
+- 탐지 시 LLM 호출을 아예 차단하고 검색 결과만 반환
+- API 응답에 `blocked_fields`를 포함해 어떤 필드가 차단 원인인지 표시
+
+### 18-3. 구조화 로그
+- `llm_mode_config`: 현재 primary/fallback 모드 기록
+- `llm_call_start`: provider, 후보 개수 기록
+- `llm_call_success`: provider 성공 기록
+- `llm_call_failure`: provider 실패 기록
+- `llm_fallback_trigger`: 폴백 전환 기록
+- `llm_call_blocked`: 민감정보 차단 기록
+
+운영 시 로그 기반으로 장애/전환 원인을 추적할 수 있다.
+
+### 18-4. 검색 튜닝
+- 지역/대상/생애주기/관심주제 가중치 상향
+- 지역 불일치 시 경미한 감점
+- 노트 토큰 매칭 가중치 상향
+- 로컬 서비스 및 최신 수정일 가산점 적용
+
+### 18-5. 테스트 보강
+- `analyze_profile_safety` 탐지 테스트
+- fail-closed API 테스트
+- retrieval 랭킹 우선순위 테스트
+- 외부 LLM 게이트 차단 테스트

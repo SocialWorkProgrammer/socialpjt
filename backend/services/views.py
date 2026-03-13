@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 
 from django.contrib.auth.decorators import login_required
@@ -9,8 +10,11 @@ from django.shortcuts import get_object_or_404, render
 
 from .llm_client import LLMClientError, get_llm_client
 from .models import ServiceFetchStatus, SocialService
-from .privacy import normalize_profile
+from .privacy import analyze_profile_safety, normalize_profile
 from .retrieval import retrieve_candidate_services, serialize_candidates
+
+
+logger = logging.getLogger(__name__)
 
 
 def _today_failure_message() -> str | None:
@@ -73,9 +77,31 @@ def chat_recommendation(request):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({"error": "유효한 JSON 형식이 아닙니다."}, status=400)
 
+    safety_report = analyze_profile_safety(payload)
     profile = normalize_profile(payload)
     candidates = retrieve_candidate_services(profile=profile, limit=5)
     candidate_payload = serialize_candidates(candidates)
+
+    if safety_report.blocked:
+        logger.warning(
+            "llm_call_blocked reason=sensitive_input fields=%s user_id=%s",
+            ",".join(safety_report.findings),
+            getattr(request.user, "id", None),
+        )
+        return JsonResponse(
+            {
+                "profile": profile,
+                "recommendations": candidate_payload,
+                "llm": {
+                    "provider": "blocked",
+                    "used_fallback": False,
+                    "message": "민감정보가 감지되어 AI 문장 생성을 차단했습니다. 검색 결과만 제공합니다.",
+                },
+                "blocked_fields": safety_report.findings,
+                "disclaimer": "추천 결과는 참고용이며 최종 판단은 사회복지사 검토가 필요합니다.",
+            },
+            status=200,
+        )
 
     try:
         llm_client = get_llm_client()
@@ -87,6 +113,7 @@ def chat_recommendation(request):
         fallback_message = "AI 응답 생성에 실패해 검색 결과만 제공합니다."
         if isinstance(exc, LLMClientError):
             fallback_message = f"AI 설정 오류: {exc}"
+        logger.warning("llm_call_error error=%s user_id=%s", exc, getattr(request.user, "id", None))
         return JsonResponse(
             {
                 "profile": profile,

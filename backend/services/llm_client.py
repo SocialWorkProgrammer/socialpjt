@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -6,6 +7,9 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 
 from .prompts import build_recommendation_prompt
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,6 +77,7 @@ class OllamaLLMClient(BaseLLMClient):
         profile: dict[str, str],
         candidates: list[dict[str, str]],
     ) -> LLMResult:
+        logger.info("llm_call_start provider=%s candidates=%d", self.provider, len(candidates))
         prompt = build_recommendation_prompt(profile=profile, candidates=candidates)
         payload = json.dumps(
             {
@@ -87,12 +92,17 @@ class OllamaLLMClient(BaseLLMClient):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urlopen(request, timeout=40) as response:  # noqa: S310
-            raw = response.read().decode("utf-8", errors="ignore")
+        try:
+            with urlopen(request, timeout=40) as response:  # noqa: S310
+                raw = response.read().decode("utf-8", errors="ignore")
+        except (HTTPError, URLError) as exc:
+            logger.warning("llm_call_failure provider=%s error=%s", self.provider, exc)
+            raise LLMClientError(f"ollama 요청 실패: {exc}") from exc
         data = json.loads(raw)
         text = str(data.get("response", "")).strip()
         if not text:
             text = "추천 문장을 생성하지 못했습니다."
+        logger.info("llm_call_success provider=%s", self.provider)
         return LLMResult(provider=self.provider, used_fallback=False, message=text)
 
 
@@ -108,6 +118,7 @@ class GeminiLLMClient(BaseLLMClient):
         profile: dict[str, str],
         candidates: list[dict[str, str]],
     ) -> LLMResult:
+        logger.info("llm_call_start provider=%s candidates=%d", self.provider, len(candidates))
         prompt = build_recommendation_prompt(profile=profile, candidates=candidates)
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -129,6 +140,7 @@ class GeminiLLMClient(BaseLLMClient):
             with urlopen(request, timeout=40) as response:  # noqa: S310
                 raw = response.read().decode("utf-8", errors="ignore")
         except (HTTPError, URLError) as exc:
+            logger.warning("llm_call_failure provider=%s error=%s", self.provider, exc)
             raise LLMClientError(f"gemini 요청 실패: {exc}") from exc
 
         data = json.loads(raw)
@@ -140,6 +152,7 @@ class GeminiLLMClient(BaseLLMClient):
                 text = str((parts[0] or {}).get("text", "")).strip()
         if not text:
             raise LLMClientError("gemini 응답 본문이 비어 있습니다.")
+        logger.info("llm_call_success provider=%s", self.provider)
         return LLMResult(provider=self.provider, used_fallback=False, message=text)
 
 
@@ -155,6 +168,7 @@ class OpenRouterLLMClient(BaseLLMClient):
         profile: dict[str, str],
         candidates: list[dict[str, str]],
     ) -> LLMResult:
+        logger.info("llm_call_start provider=%s candidates=%d", self.provider, len(candidates))
         prompt = build_recommendation_prompt(profile=profile, candidates=candidates)
         payload = json.dumps(
             {
@@ -182,6 +196,7 @@ class OpenRouterLLMClient(BaseLLMClient):
             with urlopen(request, timeout=40) as response:  # noqa: S310
                 raw = response.read().decode("utf-8", errors="ignore")
         except (HTTPError, URLError) as exc:
+            logger.warning("llm_call_failure provider=%s error=%s", self.provider, exc)
             raise LLMClientError(f"openrouter 요청 실패: {exc}") from exc
 
         data = json.loads(raw)
@@ -192,6 +207,7 @@ class OpenRouterLLMClient(BaseLLMClient):
             text = str(message.get("content", "")).strip()
         if not text:
             raise LLMClientError("openrouter 응답 본문이 비어 있습니다.")
+        logger.info("llm_call_success provider=%s", self.provider)
         return LLMResult(provider=self.provider, used_fallback=False, message=text)
 
 
@@ -209,13 +225,23 @@ class FallbackLLMClient(BaseLLMClient):
     ) -> LLMResult:
         try:
             return self.primary.generate_recommendation(profile=profile, candidates=candidates)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "llm_fallback_trigger primary=%s fallback=%s error=%s",
+                self.primary.provider,
+                self.fallback.provider,
+                exc,
+            )
             fallback_result = self.fallback.generate_recommendation(
                 profile=profile,
                 candidates=candidates,
             )
             fallback_result.used_fallback = True
             return fallback_result
+
+
+def _external_llm_allowed() -> bool:
+    return getattr(settings, "ALLOW_EXTERNAL_LLM", "false").lower() == "true"
 
 
 def _build_from_mode(mode: str) -> BaseLLMClient:
@@ -225,6 +251,8 @@ def _build_from_mode(mode: str) -> BaseLLMClient:
             model=getattr(settings, "OLLAMA_MODEL", "qwen2.5:7b-instruct"),
         )
     if mode == "gemini":
+        if not _external_llm_allowed():
+            raise LLMClientError("외부 LLM 사용이 차단되었습니다. ALLOW_EXTERNAL_LLM=true 설정이 필요합니다.")
         api_key = getattr(settings, "GEMINI_API_KEY", "")
         if not api_key:
             raise LLMClientError("GEMINI_API_KEY가 설정되지 않았습니다.")
@@ -233,6 +261,8 @@ def _build_from_mode(mode: str) -> BaseLLMClient:
             model=getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash"),
         )
     if mode == "openrouter":
+        if not _external_llm_allowed():
+            raise LLMClientError("외부 LLM 사용이 차단되었습니다. ALLOW_EXTERNAL_LLM=true 설정이 필요합니다.")
         api_key = getattr(settings, "OPENROUTER_API_KEY", "")
         if not api_key:
             raise LLMClientError("OPENROUTER_API_KEY가 설정되지 않았습니다.")
@@ -249,5 +279,7 @@ def get_llm_client() -> BaseLLMClient:
     primary = _build_from_mode(mode)
     if fallback_mode:
         fallback = _build_from_mode(fallback_mode)
+        logger.info("llm_mode_config primary=%s fallback=%s", mode, fallback_mode)
         return FallbackLLMClient(primary=primary, fallback=fallback)
+    logger.info("llm_mode_config primary=%s fallback=none", mode)
     return primary
