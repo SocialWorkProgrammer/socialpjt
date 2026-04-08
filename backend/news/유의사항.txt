@@ -1,0 +1,72 @@
+news 수집 기능 사용방법 및 유의사항
+
+1. 개요
+- 뉴스 수집 명령은 두 가지 모드로 동작합니다.
+- bootstrap: 초기 1회 전체 페이지를 수동으로 적재하는 모드입니다.
+- incremental: 운영 중 정기적으로 1페이지를 확인하는 증분 수집 모드입니다.
+- 기본값은 incremental 이므로, 스케줄러에서는 별도 옵션 없이 실행해도 됩니다.
+
+2. 초기 백필(수동 1회)
+- 목적: DB가 비어 있거나 초기 데이터 적재가 필요한 경우, 여러 페이지를 순회하며 뉴스를 저장합니다.
+- 실행 예시:
+  python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20
+- 설명:
+  - --mode bootstrap: 초기 적재 모드
+  - --max-pages 100: 최대 100페이지까지 순회
+  - --limit 20: 페이지당 저장할 최대 뉴스 수
+- bootstrap 모드는 수동으로 한 번 실행하는 것을 전제로 합니다.
+
+3. 정기 수집(스케줄러)
+- 목적: 초기 적재 이후, 최신 뉴스를 주기적으로 반영합니다.
+- 실행 예시:
+  python3 manage.py fetch_news
+- 명시적 실행 예시:
+  python3 manage.py fetch_news --mode incremental
+- 동작 방식:
+  - 1페이지 기준으로만 뉴스를 수집합니다.
+  - 이미 저장된 뉴스는 source_url 기준으로 중복 저장되지 않습니다.
+
+4. cron 예시
+- 오전 9시 실행:
+  0 9 * * * cd /home/minho/socialpjt/backend && python3 manage.py fetch_news >> /var/log/socialpjt-news.log 2>&1
+- 오후 3시 실행:
+  0 15 * * * cd /home/minho/socialpjt/backend && python3 manage.py fetch_news >> /var/log/socialpjt-news.log 2>&1
+
+5. systemd timer 예시
+- 서비스 예시(news-fetch.service):
+  [Unit]
+  Description=Fetch socialpjt news
+
+  [Service]
+  Type=oneshot
+  WorkingDirectory=/home/minho/socialpjt/backend
+  ExecStart=/usr/bin/python3 manage.py fetch_news
+
+- 타이머 예시(news-fetch.timer):
+  [Unit]
+  Description=Run socialpjt news fetch twice daily
+
+  [Timer]
+  OnCalendar=*-*-* 09:00:00
+  OnCalendar=*-*-* 15:00:00
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+
+6. 유의사항 및 리스크
+- 초기 백필이 중간에 중단되면 전체 적재가 끝나지 않은 상태로 운영에 들어갈 수 있습니다.
+- 정기 수집은 1페이지 기준 증분 수집이므로, 복지로 게시 속도가 스케줄보다 빠르면 일부 뉴스가 누락될 수 있습니다.
+- 복지로 HTML 구조나 날짜 표기 방식이 바뀌면 뉴스 수집량이 줄거나 잘못된 데이터가 저장될 수 있습니다.
+- NewsFetchStatus 는 날짜 기준으로 상태를 기록하므로, 같은 날 두 번 실행되면 마지막 실행 결과가 그날 상태로 남습니다.
+
+7. 권장 운영 순서
+- 실행 전 확인 사항
+  - 이 명령은 MySQL 이 실제로 실행 중인 로컬 또는 운영 환경에서 수행해야 합니다.
+  - 현재 Django 설정이 127.0.0.1:3306 MySQL 을 바라보므로, DB 서버가 꺼져 있으면 fetch_news 실행이 실패합니다.
+  - 최초 실행 전에는 migrate 가 끝나 있어야 합니다.
+- 권장 순서
+- 1단계: bootstrap 모드로 초기 백필 1회 실행
+- 2단계: 데이터 적재 결과 확인
+- 3단계: cron 또는 systemd timer 로 오전 9시 / 오후 3시 정기 실행 설정
+- 4단계: 이후에는 incremental 모드만 사용

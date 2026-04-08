@@ -9,7 +9,6 @@ from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
 from news.models import News, NewsFetchStatus
 
@@ -36,13 +35,13 @@ class BokjiroNewsCrawler:
             "(KHTML, like Gecko) Chrome/121.0 Safari/537.36"
         )
 
-    def fetch(self) -> List[CrawledNews]:
-        html_text = self._request_list_page()
+    def fetch(self, page_index: int = 1) -> List[CrawledNews]:
+        html_text = self._request_list_page(page_index)
         entries = self._extract_entries(html_text)
         return entries[: self.limit]
 
-    def _request_list_page(self) -> str:
-        payload = urlencode({"pageIndex": 1}).encode("utf-8")
+    def _request_list_page(self, page_index: int) -> str:
+        payload = urlencode({"pageIndex": page_index}).encode("utf-8")
         request = Request(
             self.BASE_URL,
             data=payload,
@@ -116,38 +115,107 @@ class BokjiroNewsCrawler:
 class Command(BaseCommand):
     help = "복지로 뉴스 목록을 크롤링하여 저장합니다."
     failure_message = "금일 뉴스를 확인할 수 없습니다"
+    MODE_INCREMENTAL = "incremental"
+    MODE_BOOTSTRAP = "bootstrap"
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--limit", type=int, default=20, help="저장할 최대 뉴스 수")
+        parser.add_argument(
+            "--mode",
+            choices=[self.MODE_INCREMENTAL, self.MODE_BOOTSTRAP],
+            default=self.MODE_INCREMENTAL,
+            help="incremental은 1페이지 증분 수집, bootstrap은 전체 페이지 초기 적재",
+        )
+        parser.add_argument(
+            "--max-pages",
+            type=int,
+            default=100,
+            help="bootstrap 모드에서 순회할 최대 페이지 수",
+        )
 
     def handle(self, *args, **options):
         limit: int = options["limit"]
+        mode: str = options["mode"]
+        max_pages: int = options["max_pages"]
         crawler = BokjiroNewsCrawler(limit=limit)
+        try:
+            if mode == self.MODE_BOOTSTRAP:
+                pages_processed, created, total_entries = self._bootstrap_fetch(
+                    crawler=crawler,
+                    max_pages=max_pages,
+                )
+                if total_entries == 0:
+                    raise ValueError("초기 적재를 위한 뉴스가 없습니다.")
+                self._mark_status(success=True, message="")
+                self.stdout.write(
+                    self._success_message(
+                        f"초기 적재 완료: {pages_processed}페이지 순회, 뉴스 {created}건 신규 저장 (총 {total_entries}건 확인)"
+                    ),
+                )
+                return
+
+            entries = self._fetch_entries_with_retry(crawler, page_index=1)
+            if not entries:
+                raise ValueError("수집된 뉴스가 없습니다.")
+            created = self._store_entries(entries)
+            self._mark_status(success=True, message="")
+            self.stdout.write(
+                self._success_message(f"뉴스 {created}건 저장 완료 (총 {len(entries)}건)"),
+            )
+        except Exception as exc:
+            self._mark_status(success=False, message=self.failure_message)
+            raise CommandError(f"뉴스 수집 실패: {exc}") from exc
+
+    def _success_message(self, message: str) -> str:
+        success_style = getattr(self.style, "SUCCESS", lambda value: value)
+        return success_style(message)
+
+    def _fetch_entries_with_retry(
+        self,
+        crawler: BokjiroNewsCrawler,
+        page_index: int,
+    ) -> List[CrawledNews]:
         attempts = 0
         last_error: Exception | None = None
 
         while attempts < 2:
             try:
-                entries = crawler.fetch()
-                if not entries:
-                    raise ValueError("수집된 뉴스가 없습니다.")
-                created = self._store_entries(entries)
-                self._mark_status(success=True, message="")
-                self.stdout.write(
-                    self.style.SUCCESS(f"뉴스 {created}건 저장 완료 (총 {len(entries)}건)"),
-                )
-                return
+                return crawler.fetch(page_index=page_index)
             except Exception as exc:  # pragma: no cover - 네트워크 예외 다양
                 attempts += 1
                 last_error = exc
-                logger.exception("뉴스 수집 실패: %s", exc)
+                logger.exception("뉴스 수집 실패 (page=%s): %s", page_index, exc)
                 if attempts < 2:
                     time.sleep(2)
 
-        self._mark_status(success=False, message=self.failure_message)
-        raise CommandError(f"뉴스 수집 실패: {last_error}")
+        if last_error is None:
+            raise ValueError("알 수 없는 이유로 뉴스 수집에 실패했습니다.")
+        raise last_error
 
-    @transaction.atomic
+    def _bootstrap_fetch(
+        self,
+        crawler: BokjiroNewsCrawler,
+        max_pages: int,
+    ) -> tuple[int, int, int]:
+        pages_processed = 0
+        total_created = 0
+        total_entries = 0
+
+        for page_index in range(1, max_pages + 1):
+            entries = self._fetch_entries_with_retry(crawler, page_index=page_index)
+            if not entries:
+                break
+
+            created = self._store_entries(entries)
+            pages_processed += 1
+            total_created += created
+            total_entries += len(entries)
+
+            if created == 0:
+                break
+
+        return pages_processed, total_created, total_entries
+
     def _store_entries(self, entries: List[CrawledNews]) -> int:
         created_count = 0
         for entry in entries:
