@@ -37,6 +37,7 @@ class _ParsedNewsItem:
 
 class _BokjiroListPageParser(HTMLParser):
     def __init__(self) -> None:
+        """목록 페이지에서 기사 단위를 모으기 위한 파서를 초기화한다."""
         super().__init__()
         self.items: list[_ParsedNewsItem] = []
         self._current_item: _ParsedNewsItem | None = None
@@ -47,6 +48,7 @@ class _BokjiroListPageParser(HTMLParser):
         self._tag_stack: list[tuple[bool, bool, bool]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """시작 태그를 만났을 때 현재 기사와 필드 상태를 갱신한다."""
         attrs_dict = {key: value or "" for key, value in attrs}
         classes = set(attrs_dict.get("class", "").split())
 
@@ -77,6 +79,7 @@ class _BokjiroListPageParser(HTMLParser):
                 self._current_item.href = href
 
     def handle_endtag(self, tag: str) -> None:
+        """끝 태그를 만났을 때 수집 범위를 정리하고 기사 하나를 확정한다."""
         if self._current_item is None or not self._tag_stack:
             return
 
@@ -94,6 +97,7 @@ class _BokjiroListPageParser(HTMLParser):
             self._current_item = None
 
     def handle_data(self, data: str) -> None:
+        """현재 읽는 필드가 제목/본문/날짜 중 무엇인지에 따라 텍스트를 저장한다."""
         if self._current_item is None:
             return
 
@@ -107,6 +111,7 @@ class _BokjiroListPageParser(HTMLParser):
 
     @property
     def _active_field(self) -> str | None:
+        """지금 파서가 어떤 필드의 텍스트를 읽는 중인지 반환한다."""
         if self._title_depth > 0:
             return "title"
         if self._content_depth > 0:
@@ -120,6 +125,7 @@ class BokjiroNewsCrawler:
     BASE_URL = "https://www.bokjiro.go.kr/ssis-tbu/twatxa/wlfarePr/selectWlfareList.do"
 
     def __init__(self, limit: int = 20, user_agent: str | None = None) -> None:
+        """수집 개수 제한과 요청 헤더 정보를 준비한다."""
         self.limit = limit
         self.user_agent = (
             user_agent
@@ -128,11 +134,13 @@ class BokjiroNewsCrawler:
         )
 
     def fetch(self, page_index: int = 1) -> List[CrawledNews]:
+        """복지로 목록 페이지 1개를 요청하고 기사 목록으로 변환한다."""
         html_text = self._request_list_page(page_index)
         entries = self._extract_entries(html_text)
         return entries[: self.limit]
 
     def _request_list_page(self, page_index: int) -> str:
+        """pageIndex 값을 넣어 복지로 뉴스 목록 HTML을 가져온다."""
         payload = urlencode({"pageIndex": page_index}).encode("utf-8")
         request = Request(
             self.BASE_URL,
@@ -147,6 +155,7 @@ class BokjiroNewsCrawler:
             return response.read().decode("utf-8", errors="ignore")
 
     def _extract_entries(self, html_text: str) -> List[CrawledNews]:
+        """목록 HTML에서 기사 제목, 본문, 날짜, source_url 을 추출한다."""
         parser = _BokjiroListPageParser()
         parser.feed(html_text)
         entries: List[CrawledNews] = []
@@ -182,6 +191,7 @@ class BokjiroNewsCrawler:
         return entries
 
     def _clean_text(self, raw_html: str) -> str:
+        """HTML 태그와 불필요한 공백을 제거해 읽기 쉬운 텍스트로 만든다."""
         text = re.sub(r"<[^>]+>", " ", raw_html)
         text = html.unescape(text)
         return " ".join(text.split())
@@ -193,6 +203,7 @@ class BokjiroNewsCrawler:
         created_at: date,
         href: str,
     ) -> str:
+        """기사 href 가 있으면 실제 링크를, 없으면 중복 방지용 대체 URL을 만든다."""
         normalized_href = href.strip()
         if normalized_href and "javascript" not in normalized_href.lower():
             return urljoin(self.BASE_URL, normalized_href)
@@ -209,6 +220,7 @@ class BokjiroNewsCrawler:
         return f"{self.BASE_URL}?{query_string}"
 
     def _parse_date_text(self, raw_text: str) -> date | None:
+        """텍스트 안의 날짜 문자열을 찾아 date 객체로 바꾼다."""
         match = DATE_PATTERN.search(raw_text)
         if not match:
             return None
@@ -225,6 +237,7 @@ class Command(BaseCommand):
     MODE_BOOTSTRAP = "bootstrap"
 
     def add_arguments(self, parser) -> None:
+        """명령행에서 사용할 옵션들을 등록한다."""
         parser.add_argument("--limit", type=int, default=20, help="저장할 최대 뉴스 수")
         parser.add_argument(
             "--mode",
@@ -240,6 +253,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """모드에 따라 증분 수집 또는 초기 백필을 실행하고 상태를 기록한다."""
         limit: int = options["limit"]
         mode: str = options["mode"]
         max_pages: int = options["max_pages"]
@@ -273,6 +287,7 @@ class Command(BaseCommand):
             raise CommandError(f"뉴스 수집 실패: {exc}") from exc
 
     def _success_message(self, message: str) -> str:
+        """Django 스타일이 있으면 성공 메시지 형식으로 감싸서 돌려준다."""
         success_style = getattr(self.style, "SUCCESS", lambda value: value)
         return success_style(message)
 
@@ -281,6 +296,7 @@ class Command(BaseCommand):
         crawler: BokjiroNewsCrawler,
         page_index: int,
     ) -> List[CrawledNews]:
+        """일시적인 요청 실패에 대비해 한 페이지 수집을 한 번 더 재시도한다."""
         attempts = 0
         last_error: Exception | None = None
 
@@ -303,6 +319,7 @@ class Command(BaseCommand):
         crawler: BokjiroNewsCrawler,
         max_pages: int,
     ) -> tuple[int, int, int]:
+        """초기 적재 모드에서 여러 페이지를 순회하며 누적 저장 결과를 계산한다."""
         pages_processed = 0
         total_created = 0
         total_entries = 0
@@ -323,6 +340,7 @@ class Command(BaseCommand):
         return pages_processed, total_created, total_entries
 
     def _store_entries(self, entries: List[CrawledNews]) -> int:
+        """수집한 기사들을 source_url 기준으로 저장하거나 갱신한다."""
         created_count = 0
         for entry in entries:
             _, created = News.objects.update_or_create(
@@ -338,6 +356,7 @@ class Command(BaseCommand):
         return created_count
 
     def _mark_status(self, success: bool, message: str) -> None:
+        """오늘 뉴스 수집이 성공했는지 실패했는지 상태 테이블에 남긴다."""
         status = NewsFetchStatus.STATUS_SUCCESS if success else NewsFetchStatus.STATUS_FAILURE
         NewsFetchStatus.objects.update_or_create(
             fetch_date=date.today(),
