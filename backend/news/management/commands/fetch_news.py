@@ -1,9 +1,11 @@
 import html
+import hashlib
 import logging
 import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
+from html.parser import HTMLParser
 from typing import List
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
@@ -14,6 +16,7 @@ from news.models import News, NewsFetchStatus
 
 
 logger = logging.getLogger(__name__)
+DATE_PATTERN = re.compile(r"(20\d{2})[./-](\d{2})[./-](\d{2})")
 
 
 @dataclass
@@ -22,6 +25,95 @@ class CrawledNews:
     content: str
     source_url: str
     created_at: date
+
+
+@dataclass
+class _ParsedNewsItem:
+    title_parts: list[str]
+    content_parts: list[str]
+    date_parts: list[str]
+    href: str = ""
+
+
+class _BokjiroListPageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.items: list[_ParsedNewsItem] = []
+        self._current_item: _ParsedNewsItem | None = None
+        self._item_depth = 0
+        self._title_depth = 0
+        self._content_depth = 0
+        self._date_depth = 0
+        self._tag_stack: list[tuple[bool, bool, bool]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_dict = {key: value or "" for key, value in attrs}
+        classes = set(attrs_dict.get("class", "").split())
+
+        if self._current_item is None and "news-item" not in classes:
+            return
+
+        if self._current_item is None:
+            self._current_item = _ParsedNewsItem([], [], [])
+
+        self._item_depth += 1
+
+        started_title = "news-title" in classes
+        started_content = "news-txt" in classes
+        started_date = "news-date" in classes
+
+        if started_title:
+            self._title_depth += 1
+        if started_content:
+            self._content_depth += 1
+        if started_date:
+            self._date_depth += 1
+
+        self._tag_stack.append((started_title, started_content, started_date))
+
+        if tag == "a" and self._active_field == "title":
+            href = attrs_dict.get("href", "").strip()
+            if href and not self._current_item.href:
+                self._current_item.href = href
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._current_item is None or not self._tag_stack:
+            return
+
+        started_title, started_content, started_date = self._tag_stack.pop()
+        if started_title:
+            self._title_depth -= 1
+        if started_content:
+            self._content_depth -= 1
+        if started_date:
+            self._date_depth -= 1
+
+        self._item_depth -= 1
+        if self._item_depth == 0 and self._current_item is not None:
+            self.items.append(self._current_item)
+            self._current_item = None
+
+    def handle_data(self, data: str) -> None:
+        if self._current_item is None:
+            return
+
+        active_field = self._active_field
+        if active_field == "title":
+            self._current_item.title_parts.append(data)
+        elif active_field == "content":
+            self._current_item.content_parts.append(data)
+        elif active_field == "date":
+            self._current_item.date_parts.append(data)
+
+    @property
+    def _active_field(self) -> str | None:
+        if self._title_depth > 0:
+            return "title"
+        if self._content_depth > 0:
+            return "content"
+        if self._date_depth > 0:
+            return "date"
+        return None
 
 
 class BokjiroNewsCrawler:
@@ -55,31 +147,26 @@ class BokjiroNewsCrawler:
             return response.read().decode("utf-8", errors="ignore")
 
     def _extract_entries(self, html_text: str) -> List[CrawledNews]:
-        pattern = re.compile(
-            r"<a[^>]+href=\"(?P<href>[^\"]+)\"[^>]*>(?P<title>.*?)</a>",
-            re.IGNORECASE | re.DOTALL,
-        )
-        date_pattern = re.compile(r"(20\d{2})[./-](\d{2})[./-](\d{2})")
+        parser = _BokjiroListPageParser()
+        parser.feed(html_text)
         entries: List[CrawledNews] = []
 
-        for match in pattern.finditer(html_text):
-            href = match.group("href")
-            if not href or "javascript" in href.lower():
-                continue
-            title_text = self._clean_text(match.group("title"))
+        for item in parser.items:
+            title_text = self._clean_text(" ".join(item.title_parts))
             if not title_text:
                 continue
 
-            context_window = html_text[max(0, match.start() - 300) : match.end() + 300]
-            date_match = date_pattern.search(context_window)
-            if not date_match:
-                continue
-            created_at = self._safe_parse_date(date_match)
+            created_at = self._parse_date_text(" ".join(item.date_parts))
             if not created_at:
                 continue
 
-            content_text = self._guess_content(context_window)
-            source_url = urljoin(self.BASE_URL, href)
+            content_text = self._clean_text(" ".join(item.content_parts))
+            source_url = self._build_source_url(
+                title=title_text,
+                content=content_text or title_text,
+                created_at=created_at,
+                href=item.href,
+            )
 
             entries.append(
                 CrawledNews(
@@ -99,13 +186,32 @@ class BokjiroNewsCrawler:
         text = html.unescape(text)
         return " ".join(text.split())
 
-    def _guess_content(self, context: str) -> str:
-        snippet = re.sub(r"<[^>]+>", " ", context)
-        snippet = html.unescape(snippet)
-        snippet = " ".join(snippet.split())
-        return snippet[:500]
+    def _build_source_url(
+        self,
+        title: str,
+        content: str,
+        created_at: date,
+        href: str,
+    ) -> str:
+        normalized_href = href.strip()
+        if normalized_href and "javascript" not in normalized_href.lower():
+            return urljoin(self.BASE_URL, normalized_href)
 
-    def _safe_parse_date(self, match: re.Match[str]) -> date | None:
+        synthetic_key = hashlib.sha256(
+            f"{created_at.isoformat()}::{title}::{content}".encode("utf-8"),
+        ).hexdigest()[:16]
+        query_string = urlencode(
+            {
+                "news_date": created_at.isoformat(),
+                "news_key": synthetic_key,
+            },
+        )
+        return f"{self.BASE_URL}?{query_string}"
+
+    def _parse_date_text(self, raw_text: str) -> date | None:
+        match = DATE_PATTERN.search(raw_text)
+        if not match:
+            return None
         try:
             return datetime.strptime("-".join(match.groups()), "%Y-%m-%d").date()
         except ValueError:
