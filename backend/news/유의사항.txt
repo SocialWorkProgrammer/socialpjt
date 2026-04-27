@@ -1,45 +1,90 @@
 news 수집 기능 사용방법 및 유의사항
 
 1. 개요
-- 뉴스 수집 명령은 두 가지 모드로 동작합니다.
-- bootstrap: 초기 1회 전체 페이지를 수동으로 적재하는 모드입니다.
-- incremental: 운영 중 정기적으로 1페이지를 확인하는 증분 수집 모드입니다.
-- 기본값은 incremental 이므로, 스케줄러에서는 별도 옵션 없이 실행해도 됩니다.
-- 현재 복지로 뉴스는 상세 페이지를 다시 방문하지 않고, 목록 페이지의 news-item 블록에서 제목(news-title), 본문(news-txt), 등록일(news-date)을 직접 추출합니다.
-- 목록 항목에 href 가 없더라도 제목+등록일+본문 기준의 안정적인 source_url 을 생성해 중복 저장 여부를 판단합니다.
-
-2. 초기 백필(수동 1회)
-- 목적: DB가 비어 있거나 초기 데이터 적재가 필요한 경우, 여러 페이지를 순회하며 뉴스를 저장합니다.
-- 실행 예시:
-  python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20
-- 설명:
-  - --mode bootstrap: 초기 적재 모드
-  - --max-pages 100: 최대 100페이지까지 순회
-  - --limit 20: 페이지당 저장할 최대 뉴스 수
-- bootstrap 모드는 수동으로 한 번 실행하는 것을 전제로 합니다.
-- HTML 파싱 로직을 수정한 직후에도 아래 bootstrap 명령으로 한 번 다시 적재해 두는 것을 권장합니다.
-- 운영 반영 직후 초기 백필 권장 예시:
-  1) python3 manage.py migrate
-  2) python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20
-  3) 저장 결과와 NewsFetchStatus 상태를 확인한 뒤 정기 incremental 수집으로 전환
-
-3. 정기 수집(스케줄러)
-- 목적: 초기 적재 이후, 최신 뉴스를 주기적으로 반영합니다.
-- 실행 예시:
+- 이 문서는 복지로 뉴스 데이터를 Django DB에 저장하는 `fetch_news` 명령의 사용 방법을 정리한 매뉴얼입니다.
+- 실행 위치는 항상 `backend/` 디렉터리입니다.
+- 기본 명령은 아래 Django management command 입니다.
   python3 manage.py fetch_news
-- 명시적 실행 예시:
-  python3 manage.py fetch_news --mode incremental
-- 동작 방식:
-  - 1페이지 기준으로만 뉴스를 수집합니다.
-  - 이미 저장된 뉴스는 source_url 기준으로 중복 저장되지 않습니다.
+- 수집 결과는 `News` 테이블에 저장되고, 실행 성공/실패 상태는 `NewsFetchStatus` 테이블에 날짜별로 기록됩니다.
+- 이미 저장된 뉴스는 `source_url` 기준으로 중복 저장되지 않고 갱신됩니다.
 
-4. cron 예시
+2. 왜 Playwright를 사용하는가
+- 복지로 뉴스 페이지는 처음 HTML을 요청했을 때 뉴스 목록 전체가 바로 내려오는 구조가 아닙니다.
+- 최초 응답은 JavaScript 앱을 실행하기 위한 껍데기이고, 실제 뉴스 목록은 브라우저가 JavaScript를 실행한 뒤 화면에 렌더링됩니다.
+- 그래서 BeautifulSoup 또는 단순 HTTP 요청만으로는 `head`나 로딩용 `body`만 보고 끝날 수 있습니다.
+- Playwright는 실제 Chromium 브라우저를 백그라운드(headless)로 실행해서 JavaScript 렌더링이 끝난 화면 DOM을 읽을 수 있게 해주는 Python 라이브러리입니다.
+- 현재 기본 수집 방식은 Playwright 기반 `browser` 모드입니다.
+- 기존 직접 HTTP 요청 방식은 비교/임시 확인용 `http` 모드로 남겨 두었습니다.
+
+3. 최초 환경 준비
+- Python 패키지 설치:
+  python3 -m pip install -r requirements.txt
+- Playwright 브라우저 설치:
+  python3 -m playwright install --with-deps chromium
+- DB 마이그레이션:
+  python3 manage.py migrate
+- 주의:
+  - `pip install playwright`만으로는 충분하지 않습니다.
+  - Playwright 패키지 설치 후 Chromium 브라우저 바이너리도 반드시 설치해야 합니다.
+  - 서버에서 실행할 때도 위 `playwright install` 단계가 필요합니다.
+  - 현재 Django 설정이 MySQL을 바라보므로, MySQL 서버가 켜져 있어야 수집 결과를 저장할 수 있습니다.
+
+4. 수집 명령 옵션
+- `--mode`
+  - `incremental`: 최신 1페이지를 확인하는 정기 증분 수집 모드입니다.
+  - `bootstrap`: 여러 페이지를 순회하는 초기 백필 모드입니다.
+  - 기본값은 `incremental`입니다.
+- `--max-pages`
+  - `bootstrap` 모드에서 최대 몇 페이지까지 순회할지 정합니다.
+  - 기본값은 100입니다.
+- `--limit`
+  - 페이지당 저장할 최대 뉴스 수입니다.
+  - 기본값은 20입니다.
+- `--source`
+  - `browser`: Playwright로 실제 렌더링된 뉴스 목록을 읽습니다. 기본값입니다.
+  - `http`: 기존 방식처럼 직접 HTTP 요청 응답을 파싱합니다. 현재 복지로 구조에서는 정상 데이터가 부족할 수 있으므로 비교/비상 확인용으로만 사용합니다.
+
+5. 처음 한 번 실행하는 초기 백필 방법
+- 목적:
+  - DB가 비어 있거나 운영 반영 직후 과거 뉴스까지 한 번에 채워야 할 때 사용합니다.
+- 권장 실행 순서:
+  1) backend 디렉터리로 이동
+     cd /home/minho/socialpjt/backend
+  2) 의존성 설치
+     python3 -m pip install -r requirements.txt
+  3) Playwright 브라우저 설치
+     python3 -m playwright install --with-deps chromium
+  4) 마이그레이션 실행
+     python3 manage.py migrate
+  5) 초기 백필 실행
+     python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20
+  6) 저장된 뉴스 목록과 `NewsFetchStatus` 상태 확인
+- 명시적으로 browser 모드를 적고 싶다면 아래처럼 실행해도 같습니다.
+  python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20 --source browser
+- `bootstrap`은 여러 페이지를 돌기 때문에 일반 정기 수집보다 시간이 오래 걸립니다.
+- 중간에 실패했다면 오류 메시지를 확인한 뒤 같은 명령을 다시 실행하면 됩니다. `source_url` 기준으로 중복 저장을 막기 때문에 이미 저장된 뉴스가 다시 중복 생성되지는 않습니다.
+
+6. 정기 수집 방법
+- 목적:
+  - 초기 백필 이후 최신 뉴스만 주기적으로 반영합니다.
+- 기본 실행:
+  python3 manage.py fetch_news
+- 명시적 실행:
+  python3 manage.py fetch_news --mode incremental --source browser
+- 동작 방식:
+  - 기본적으로 1페이지 기준으로만 뉴스를 수집합니다.
+  - 정기 수집 주기보다 복지로 뉴스 게시 속도가 빠르면 일부 뉴스가 1페이지 밖으로 밀려 누락될 수 있습니다.
+  - 이 경우 스케줄 주기를 늘리거나, 필요 시 수동으로 `bootstrap`을 다시 실행해 보완합니다.
+
+7. cron 예시
 - 오전 9시 실행:
   0 9 * * * cd /home/minho/socialpjt/backend && python3 manage.py fetch_news >> /var/log/socialpjt-news.log 2>&1
 - 오후 3시 실행:
   0 15 * * * cd /home/minho/socialpjt/backend && python3 manage.py fetch_news >> /var/log/socialpjt-news.log 2>&1
+- cron 환경에서는 PATH, Python 가상환경, Playwright 브라우저 설치 위치가 터미널 실행 때와 다를 수 있습니다.
+- 가상환경을 사용한다면 cron 명령에서 가상환경의 Python 경로를 명시하는 것이 안전합니다.
 
-5. systemd timer 예시
+8. systemd timer 예시
 - 서비스 예시(news-fetch.service):
   [Unit]
   Description=Fetch socialpjt news
@@ -61,20 +106,43 @@ news 수집 기능 사용방법 및 유의사항
   [Install]
   WantedBy=timers.target
 
-6. 유의사항 및 리스크
-- 초기 백필이 중간에 중단되면 전체 적재가 끝나지 않은 상태로 운영에 들어갈 수 있습니다.
-- 정기 수집은 1페이지 기준 증분 수집이므로, 복지로 게시 속도가 스케줄보다 빠르면 일부 뉴스가 누락될 수 있습니다.
-- 복지로 HTML 구조나 날짜 표기 방식이 바뀌면 뉴스 수집량이 줄거나 잘못된 데이터가 저장될 수 있습니다.
-- 목록 페이지에서 기사 본문을 직접 읽는 구조이므로, news-item / news-title / news-txt / news-date 클래스가 바뀌면 파서 수정 후 bootstrap 재실행이 필요할 수 있습니다.
-- NewsFetchStatus 는 날짜 기준으로 상태를 기록하므로, 같은 날 두 번 실행되면 마지막 실행 결과가 그날 상태로 남습니다.
+9. 수집 로직이 읽는 HTML 구조
+- Playwright가 렌더링된 페이지 HTML을 가져오면, 기존 parser가 아래 클래스를 기준으로 데이터를 추출합니다.
+  - `news-item`: 뉴스 한 건을 감싸는 블록
+  - `news-title`: 제목
+  - `news-txt`: 목록에 표시되는 본문/요약
+  - `news-date`: 등록일
+- 기사 링크 href가 있으면 그 링크를 `source_url`로 사용합니다.
+- href가 없거나 JavaScript 링크이면 제목+날짜+본문으로 안정적인 대체 `source_url`을 생성합니다.
 
-7. 권장 운영 순서
-- 실행 전 확인 사항
-  - 이 명령은 MySQL 이 실제로 실행 중인 로컬 또는 운영 환경에서 수행해야 합니다.
-  - 현재 Django 설정이 127.0.0.1:3306 MySQL 을 바라보므로, DB 서버가 꺼져 있으면 fetch_news 실행이 실패합니다.
-  - 최초 실행 전에는 migrate 가 끝나 있어야 합니다.
-- 권장 순서
-- 1단계: bootstrap 모드로 초기 백필 1회 실행
-- 2단계: 데이터 적재 결과 확인
-- 3단계: cron 또는 systemd timer 로 오전 9시 / 오후 3시 정기 실행 설정
-- 4단계: 이후에는 incremental 모드만 사용
+10. 문제 해결
+- `Playwright가 설치되어 있지 않습니다` 오류:
+  - `python3 -m pip install -r requirements.txt`를 먼저 실행했는지 확인합니다.
+- `Playwright 실행 중 오류가 발생했습니다` 또는 Chromium 관련 오류:
+  - `python3 -m playwright install --with-deps chromium`을 실행합니다.
+  - 서버 권한 문제로 `--with-deps`가 실패하면 관리자 권한 또는 서버 패키지 설치 권한이 필요할 수 있습니다.
+- 뉴스가 0건 수집되는 경우:
+  - 복지로 페이지 구조가 바뀌었을 수 있습니다.
+  - 렌더링된 DOM에 `news-item`, `news-title`, `news-txt`, `news-date` 클래스가 아직 존재하는지 확인합니다.
+- DB 저장 실패:
+  - MySQL이 실행 중인지 확인합니다.
+  - `python3 manage.py migrate`가 완료되었는지 확인합니다.
+- 임시 비교가 필요한 경우:
+  - 아래 명령으로 기존 HTTP 방식도 실행해 볼 수 있습니다.
+    python3 manage.py fetch_news --source http
+  - 단, 현재 복지로 구조에서는 `http` 방식이 실제 목록을 충분히 가져오지 못할 수 있습니다.
+
+11. 운영 유의사항
+- `NewsFetchStatus`는 날짜 기준으로 상태를 저장하므로, 같은 날 여러 번 실행하면 마지막 실행 결과가 그날 상태로 남습니다.
+- `bootstrap`은 초기 적재용입니다. 정기 스케줄러에는 기본 `incremental` 명령을 사용하는 것이 좋습니다.
+- Playwright는 실제 브라우저를 띄우므로 단순 HTTP 요청보다 CPU/메모리를 더 사용합니다.
+- 여러 개의 `fetch_news` 명령을 동시에 실행하지 않는 것이 좋습니다.
+- 복지로 사이트 구조나 JavaScript 동작이 바뀌면 selector 또는 parser 수정이 필요할 수 있습니다.
+
+12. 권장 운영 순서 요약
+- 1단계: `python3 -m pip install -r requirements.txt`
+- 2단계: `python3 -m playwright install --with-deps chromium`
+- 3단계: `python3 manage.py migrate`
+- 4단계: `python3 manage.py fetch_news --mode bootstrap --max-pages 100 --limit 20`
+- 5단계: 저장 결과와 `NewsFetchStatus` 확인
+- 6단계: cron 또는 systemd timer로 `python3 manage.py fetch_news` 정기 실행

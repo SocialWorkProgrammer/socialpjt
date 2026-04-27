@@ -1,5 +1,6 @@
 import html
 import hashlib
+from importlib import import_module
 import logging
 import re
 import time
@@ -123,8 +124,16 @@ class _BokjiroListPageParser(HTMLParser):
 
 class BokjiroNewsCrawler:
     BASE_URL = "https://www.bokjiro.go.kr/ssis-tbu/twatxa/wlfarePr/selectWlfareList.do"
+    SOURCE_BROWSER = "browser"
+    SOURCE_HTTP = "http"
+    RENDERED_LIST_SELECTOR = ".news-item"
 
-    def __init__(self, limit: int = 20, user_agent: str | None = None) -> None:
+    def __init__(
+        self,
+        limit: int = 20,
+        user_agent: str | None = None,
+        source: str = SOURCE_BROWSER,
+    ) -> None:
         """수집 개수 제한과 요청 헤더 정보를 준비한다."""
         self.limit = limit
         self.user_agent = (
@@ -132,12 +141,89 @@ class BokjiroNewsCrawler:
             or "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/121.0 Safari/537.36"
         )
+        self.source = source
 
     def fetch(self, page_index: int = 1) -> List[CrawledNews]:
         """복지로 목록 페이지 1개를 요청하고 기사 목록으로 변환한다."""
-        html_text = self._request_list_page(page_index)
+        if self.source == self.SOURCE_BROWSER:
+            html_text = self._request_rendered_list_page(page_index)
+        elif self.source == self.SOURCE_HTTP:
+            html_text = self._request_list_page(page_index)
+        else:
+            raise ValueError(f"지원하지 않는 뉴스 수집 방식입니다: {self.source}")
+
         entries = self._extract_entries(html_text)
         return entries[: self.limit]
+
+    def _request_rendered_list_page(self, page_index: int) -> str:
+        """Playwright로 JS 렌더링이 끝난 목록 DOM을 가져온다."""
+        try:
+            playwright_sync_api = import_module("playwright.sync_api")
+        except ImportError as exc:  # pragma: no cover - 환경 의존 오류 메시지
+            raise RuntimeError(
+                "Playwright가 설치되어 있지 않습니다. "
+                "`pip install playwright` 후 `python -m playwright install --with-deps chromium`을 실행하세요."
+            ) from exc
+
+        playwright_error = playwright_sync_api.Error
+        playwright_timeout_error = playwright_sync_api.TimeoutError
+        sync_playwright = playwright_sync_api.sync_playwright
+
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page(user_agent=self.user_agent)
+                    page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=30_000)
+                    page.wait_for_selector(self.RENDERED_LIST_SELECTOR, timeout=30_000)
+                    self._move_to_rendered_page(page, page_index)
+                    page.wait_for_selector(self.RENDERED_LIST_SELECTOR, timeout=30_000)
+                    return page.content()
+                finally:
+                    browser.close()
+        except playwright_timeout_error as exc:
+            raise RuntimeError("복지로 뉴스 목록 렌더링 대기 시간이 초과되었습니다.") from exc
+        except playwright_error as exc:
+            raise RuntimeError(
+                "Playwright 실행 중 오류가 발생했습니다. "
+                "브라우저가 설치되어 있는지 확인하려면 "
+                "`python -m playwright install --with-deps chromium`을 실행하세요."
+            ) from exc
+
+    def _move_to_rendered_page(self, page, page_index: int) -> None:
+        """렌더링된 페이지 안에서 요청한 목록 페이지로 이동한다."""
+        if page_index <= 1:
+            return
+
+        page_number = str(page_index)
+        candidates = [
+            f'a:has-text("{page_number}")',
+            f'button:has-text("{page_number}")',
+            f'[role="button"]:has-text("{page_number}")',
+            f'text="{page_number}"',
+        ]
+        first_item_before = page.locator(self.RENDERED_LIST_SELECTOR).first.inner_text(
+            timeout=5_000,
+        )
+
+        for selector in candidates:
+            locator = page.locator(selector)
+            if locator.count() == 0:
+                continue
+            locator.first.click()
+            page.wait_for_function(
+                """
+                ([itemSelector, previousText]) => {
+                    const item = document.querySelector(itemSelector);
+                    return item && item.innerText !== previousText;
+                }
+                """,
+                [self.RENDERED_LIST_SELECTOR, first_item_before],
+                timeout=10_000,
+            )
+            return
+
+        raise RuntimeError(f"복지로 뉴스 {page_index}페이지 버튼을 찾지 못했습니다.")
 
     def _request_list_page(self, page_index: int) -> str:
         """pageIndex 값을 넣어 복지로 뉴스 목록 HTML을 가져온다."""
@@ -251,13 +337,20 @@ class Command(BaseCommand):
             default=100,
             help="bootstrap 모드에서 순회할 최대 페이지 수",
         )
+        parser.add_argument(
+            "--source",
+            choices=[BokjiroNewsCrawler.SOURCE_BROWSER, BokjiroNewsCrawler.SOURCE_HTTP],
+            default=BokjiroNewsCrawler.SOURCE_BROWSER,
+            help="browser는 Playwright 렌더링 DOM을, http는 기존 직접 요청 HTML을 사용",
+        )
 
     def handle(self, *args, **options):
         """모드에 따라 증분 수집 또는 초기 백필을 실행하고 상태를 기록한다."""
         limit: int = options["limit"]
         mode: str = options["mode"]
         max_pages: int = options["max_pages"]
-        crawler = BokjiroNewsCrawler(limit=limit)
+        source: str = options["source"]
+        crawler = BokjiroNewsCrawler(limit=limit, source=source)
         try:
             if mode == self.MODE_BOOTSTRAP:
                 pages_processed, created, total_entries = self._bootstrap_fetch(
@@ -283,7 +376,10 @@ class Command(BaseCommand):
                 self._success_message(f"뉴스 {created}건 저장 완료 (총 {len(entries)}건)"),
             )
         except Exception as exc:
-            self._mark_status(success=False, message=self.failure_message)
+            try:
+                self._mark_status(success=False, message=self.failure_message)
+            except Exception:
+                logger.exception("뉴스 수집 실패 상태 기록 중 추가 오류가 발생했습니다.")
             raise CommandError(f"뉴스 수집 실패: {exc}") from exc
 
     def _success_message(self, message: str) -> str:

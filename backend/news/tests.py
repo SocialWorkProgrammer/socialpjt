@@ -79,12 +79,27 @@ class BokjiroNewsCrawlerTests(SimpleTestCase):
             store_path,
             return_value=2,
         ) as mocked_store, patch(status_path) as mocked_status:
-            call_command("fetch_news", limit=10, stdout=stdout)
+            call_command("fetch_news", limit=10, source="http", stdout=stdout)
 
         saved_entries = mocked_store.call_args.args[0]
         self.assertEqual(len(saved_entries), 2)
         self.assertIn("고유가 피해지원금", saved_entries[0].title)
         mocked_status.assert_called_once_with(success=True, message="")
+        self.assertIn("뉴스 2건 저장 완료", stdout.getvalue())
+
+    def test_fetch_news_command_uses_browser_source_by_default(self) -> None:
+        crawler_path = "news.management.commands.fetch_news.BokjiroNewsCrawler._request_rendered_list_page"
+        store_path = "news.management.commands.fetch_news.Command._store_entries"
+        status_path = "news.management.commands.fetch_news.Command._mark_status"
+        stdout = StringIO()
+
+        with patch(crawler_path, return_value=SAMPLE_BOKJIRO_HTML) as mocked_rendered, patch(
+            store_path,
+            return_value=2,
+        ), patch(status_path):
+            call_command("fetch_news", limit=10, stdout=stdout)
+
+        mocked_rendered.assert_called_once_with(1)
         self.assertIn("뉴스 2건 저장 완료", stdout.getvalue())
 
     def test_builds_distinct_synthetic_urls_for_same_title_and_date(self) -> None:
