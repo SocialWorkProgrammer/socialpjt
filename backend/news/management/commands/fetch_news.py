@@ -297,7 +297,7 @@ class BokjiroNewsCrawler:
                     return item && item.innerText !== previousText;
                 }
                 """,
-                [self.RENDERED_LIST_SELECTOR, first_item_before],
+                arg=[self.RENDERED_LIST_SELECTOR, first_item_before],
                 timeout=10_000,
             )
             return

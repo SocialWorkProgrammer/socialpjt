@@ -1,5 +1,5 @@
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.management import call_command
 from django.test import SimpleTestCase
@@ -114,6 +114,24 @@ class BokjiroNewsCrawlerTests(SimpleTestCase):
         self.assertEqual(title, "복지 서비스 신청 안내")
         self.assertEqual(content, "신청 대상과 기간을 확인하세요.")
         self.assertEqual(date_text, "2026.04.16")
+
+    def test_move_to_rendered_page_passes_wait_argument_by_keyword(self) -> None:
+        crawler = BokjiroNewsCrawler(limit=10)
+        first_item_locator = Mock()
+        first_item_locator.first.inner_text.return_value = "이전 뉴스"
+        page_button_locator = Mock()
+        page_button_locator.count.return_value = 1
+        page = Mock()
+        page.locator.side_effect = [first_item_locator, page_button_locator]
+
+        crawler._move_to_rendered_page(page, page_index=2)
+
+        page_button_locator.first.click.assert_called_once()
+        self.assertEqual(
+            page.wait_for_function.call_args.kwargs["arg"],
+            [crawler.RENDERED_LIST_SELECTOR, "이전 뉴스"],
+        )
+        self.assertEqual(page.wait_for_function.call_args.kwargs["timeout"], 10_000)
 
     def test_builds_distinct_synthetic_urls_for_same_title_and_date(self) -> None:
         crawler = BokjiroNewsCrawler(limit=10)
