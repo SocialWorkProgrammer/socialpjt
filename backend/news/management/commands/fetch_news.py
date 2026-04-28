@@ -146,7 +146,7 @@ class BokjiroNewsCrawler:
     def fetch(self, page_index: int = 1) -> List[CrawledNews]:
         """복지로 목록 페이지 1개를 요청하고 기사 목록으로 변환한다."""
         if self.source == self.SOURCE_BROWSER:
-            html_text = self._request_rendered_list_page(page_index)
+            return self._fetch_rendered_entries(page_index)
         elif self.source == self.SOURCE_HTTP:
             html_text = self._request_list_page(page_index)
         else:
@@ -155,8 +155,8 @@ class BokjiroNewsCrawler:
         entries = self._extract_entries(html_text)
         return entries[: self.limit]
 
-    def _request_rendered_list_page(self, page_index: int) -> str:
-        """Playwright로 JS 렌더링이 끝난 목록 DOM을 가져온다."""
+    def _fetch_rendered_entries(self, page_index: int) -> List[CrawledNews]:
+        """Playwright로 JS 렌더링이 끝난 뉴스 항목을 화면 텍스트 기준으로 수집한다."""
         try:
             playwright_sync_api = import_module("playwright.sync_api")
         except ImportError as exc:  # pragma: no cover - 환경 의존 오류 메시지
@@ -178,7 +178,7 @@ class BokjiroNewsCrawler:
                     page.wait_for_selector(self.RENDERED_LIST_SELECTOR, timeout=30_000)
                     self._move_to_rendered_page(page, page_index)
                     page.wait_for_selector(self.RENDERED_LIST_SELECTOR, timeout=30_000)
-                    return page.content()
+                    return self._extract_rendered_entries_from_page(page)
                 finally:
                     browser.close()
         except playwright_timeout_error as exc:
@@ -189,6 +189,85 @@ class BokjiroNewsCrawler:
                 "브라우저가 설치되어 있는지 확인하려면 "
                 "`python -m playwright install --with-deps chromium`을 실행하세요."
             ) from exc
+
+    def _extract_rendered_entries_from_page(self, page) -> List[CrawledNews]:
+        """Playwright locator로 렌더링된 뉴스 항목의 화면 텍스트를 읽는다."""
+        items = page.locator(self.RENDERED_LIST_SELECTOR)
+        entries: List[CrawledNews] = []
+
+        for index in range(items.count()):
+            item = items.nth(index)
+            item_text = self._clean_text(item.inner_text(timeout=5_000))
+            href = self._first_href_from_rendered_item(item)
+            entry = self._extract_rendered_entry(item=item, item_text=item_text, href=href)
+            if entry is None:
+                continue
+
+            entries.append(entry)
+            if len(entries) >= self.limit:
+                break
+
+        return entries
+
+    def _first_href_from_rendered_item(self, item) -> str:
+        """렌더링된 뉴스 항목에서 첫 번째 링크 href를 가져온다."""
+        links = item.locator("a[href]")
+        if links.count() == 0:
+            return ""
+        return links.first.get_attribute("href") or ""
+
+    def _extract_rendered_entry(self, item, item_text: str, href: str) -> CrawledNews | None:
+        """렌더링된 뉴스 항목 1개를 CrawledNews로 변환한다."""
+        title_text = self._text_from_rendered_child(item, ".news-title")
+        content_text = self._text_from_rendered_child(item, ".news-txt")
+        date_text = self._text_from_rendered_child(item, ".news-date")
+
+        fallback_title, fallback_content, fallback_date = self._split_rendered_item_text(
+            item_text,
+        )
+        title_text = title_text or fallback_title
+        content_text = content_text or fallback_content or title_text
+        created_at = self._parse_date_text(date_text or fallback_date or item_text)
+        if not title_text or not created_at:
+            return None
+
+        source_url = self._build_source_url(
+            title=title_text,
+            content=content_text,
+            created_at=created_at,
+            href=href,
+        )
+        return CrawledNews(
+            title=title_text,
+            content=content_text,
+            source_url=source_url,
+            created_at=created_at,
+        )
+
+    def _text_from_rendered_child(self, item, selector: str) -> str:
+        """하위 selector 텍스트를 읽되 없으면 빈 문자열을 반환한다."""
+        child = item.locator(selector)
+        if child.count() == 0:
+            return ""
+        return self._clean_text(child.first.inner_text(timeout=5_000))
+
+    def _split_rendered_item_text(self, item_text: str) -> tuple[str, str, str]:
+        """클래스 기반 추출이 실패했을 때 화면 텍스트에서 제목/본문/날짜를 나눈다."""
+        lines = [line.strip() for line in item_text.splitlines() if line.strip()]
+        date_text = ""
+        content_lines: list[str] = []
+        title_text = ""
+
+        for line in lines:
+            if not date_text and DATE_PATTERN.search(line):
+                date_text = line
+                continue
+            if not title_text:
+                title_text = line
+                continue
+            content_lines.append(line)
+
+        return title_text, " ".join(content_lines), date_text
 
     def _move_to_rendered_page(self, page, page_index: int) -> None:
         """렌더링된 페이지 안에서 요청한 목록 페이지로 이동한다."""

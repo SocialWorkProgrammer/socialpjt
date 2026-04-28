@@ -88,12 +88,14 @@ class BokjiroNewsCrawlerTests(SimpleTestCase):
         self.assertIn("뉴스 2건 저장 완료", stdout.getvalue())
 
     def test_fetch_news_command_uses_browser_source_by_default(self) -> None:
-        crawler_path = "news.management.commands.fetch_news.BokjiroNewsCrawler._request_rendered_list_page"
+        crawler_path = "news.management.commands.fetch_news.BokjiroNewsCrawler._fetch_rendered_entries"
         store_path = "news.management.commands.fetch_news.Command._store_entries"
         status_path = "news.management.commands.fetch_news.Command._mark_status"
         stdout = StringIO()
+        crawler = BokjiroNewsCrawler(limit=10)
+        entries = crawler._extract_entries(SAMPLE_BOKJIRO_HTML)
 
-        with patch(crawler_path, return_value=SAMPLE_BOKJIRO_HTML) as mocked_rendered, patch(
+        with patch(crawler_path, return_value=entries) as mocked_rendered, patch(
             store_path,
             return_value=2,
         ), patch(status_path):
@@ -101,6 +103,17 @@ class BokjiroNewsCrawlerTests(SimpleTestCase):
 
         mocked_rendered.assert_called_once_with(1)
         self.assertIn("뉴스 2건 저장 완료", stdout.getvalue())
+
+    def test_split_rendered_item_text_falls_back_without_news_classes(self) -> None:
+        crawler = BokjiroNewsCrawler(limit=10)
+
+        title, content, date_text = crawler._split_rendered_item_text(
+            "복지 서비스 신청 안내\n신청 대상과 기간을 확인하세요.\n2026.04.16",
+        )
+
+        self.assertEqual(title, "복지 서비스 신청 안내")
+        self.assertEqual(content, "신청 대상과 기간을 확인하세요.")
+        self.assertEqual(date_text, "2026.04.16")
 
     def test_builds_distinct_synthetic_urls_for_same_title_and_date(self) -> None:
         crawler = BokjiroNewsCrawler(limit=10)
